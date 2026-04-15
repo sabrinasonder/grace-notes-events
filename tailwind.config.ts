@@ -15,7 +15,9 @@ export default {
     extend: {
       fontFamily: {
         display: ["Fraunces", "serif"],
+        serif: ["Fraunces", "serif"],
         body: ["Manrope", "sans-serif"],
+        sans: ["Manrope", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
