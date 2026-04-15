@@ -8,6 +8,7 @@ import Index from "./pages/Index.tsx";
 import Welcome from "./pages/Welcome.tsx";
 import CreateEvent from "./pages/CreateEvent.tsx";
 import EventDetail from "./pages/EventDetail.tsx";
+import Unsubscribe from "./pages/Unsubscribe.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
             <Route path="/welcome" element={<Welcome />} />
             <Route path="/create" element={<CreateEvent />} />
             <Route path="/event/:id" element={<EventDetail />} />
+            <Route path="/unsubscribe" element={<Unsubscribe />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
