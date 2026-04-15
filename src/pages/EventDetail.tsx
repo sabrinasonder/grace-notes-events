@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useParams, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -18,6 +18,10 @@ import {
   Bell,
   CircleDollarSign,
   CircleAlert,
+  Send,
+  ImagePlus,
+  Camera,
+  Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -25,7 +29,7 @@ import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe
 import { getStripe, getStripeEnvironment } from "@/lib/stripe";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 
-type TabKey = "about" | "guests" | "updates";
+type TabKey = "about" | "guests" | "updates" | "photos";
 
 const EventDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -33,6 +37,13 @@ const EventDetail = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [updateBody, setUpdateBody] = useState("");
+  const [updateImage, setUpdateImage] = useState<File | null>(null);
+  const [updateImagePreview, setUpdateImagePreview] = useState<string | null>(null);
+  const [isPostingUpdate, setIsPostingUpdate] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const updateImageRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState<TabKey>("about");
   const [showCheckout, setShowCheckout] = useState(false);
 
@@ -80,8 +91,89 @@ const EventDetail = () => {
     enabled: !!id && !!user,
   });
 
+  // Fetch event photos
+  const { data: photos = [] } = useQuery({
+    queryKey: ["event_photos", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_photos")
+        .select("*, profiles!event_photos_uploaded_by_fkey(full_name, avatar_url)")
+        .eq("event_id", id!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!id && !!user,
+  });
+
   // Current user's RSVP
   const myRsvp = rsvps.find((r: any) => r.user_id === user?.id);
+
+  // Post an update (host only)
+  const handlePostUpdate = async () => {
+    if (!updateBody.trim() || !user || !id) return;
+    setIsPostingUpdate(true);
+    try {
+      let imageUrl: string | null = null;
+      if (updateImage) {
+        const ext = updateImage.name.split(".").pop();
+        const path = `updates/${id}/${crypto.randomUUID()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from("event-images")
+          .upload(path, updateImage);
+        if (uploadErr) throw uploadErr;
+        const { data: urlData } = supabase.storage
+          .from("event-images")
+          .getPublicUrl(path);
+        imageUrl = urlData.publicUrl;
+      }
+      const { error } = await supabase.from("updates").insert({
+        event_id: id,
+        author_id: user.id,
+        body: updateBody.trim(),
+        image_url: imageUrl,
+      });
+      if (error) throw error;
+      setUpdateBody("");
+      setUpdateImage(null);
+      setUpdateImagePreview(null);
+      queryClient.invalidateQueries({ queryKey: ["updates", id] });
+      toast({ title: "Update posted" });
+    } catch (err: any) {
+      toast({ title: "Failed to post update", description: err.message, variant: "destructive" });
+    } finally {
+      setIsPostingUpdate(false);
+    }
+  };
+
+  // Upload a photo (any RSVP'd user)
+  const handlePhotoUpload = async (file: File) => {
+    if (!user || !id) return;
+    setPhotoUploading(true);
+    try {
+      const ext = file.name.split(".").pop();
+      const path = `photos/${id}/${crypto.randomUUID()}.${ext}`;
+      const { error: uploadErr } = await supabase.storage
+        .from("event-images")
+        .upload(path, file);
+      if (uploadErr) throw uploadErr;
+      const { data: urlData } = supabase.storage
+        .from("event-images")
+        .getPublicUrl(path);
+      const { error } = await supabase.from("event_photos").insert({
+        event_id: id,
+        uploaded_by: user.id,
+        image_url: urlData.publicUrl,
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["event_photos", id] });
+      toast({ title: "Photo uploaded" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
 
   // RSVP mutation
   const rsvpMutation = useMutation({
@@ -175,6 +267,7 @@ const EventDetail = () => {
     { key: "about", label: "About" },
     { key: "guests", label: `Guests (${goingRsvps.length})` },
     { key: "updates", label: `Updates (${updates.length})` },
+    { key: "photos", label: `Photos (${photos.length})` },
   ];
 
   const rsvpButtons: {
@@ -421,11 +514,69 @@ const EventDetail = () => {
 
         {tab === "updates" && (
           <div className="space-y-4">
-            {updates.length === 0 ? (
+            {/* Host composer */}
+            {isHost && (
+              <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+                <textarea
+                  value={updateBody}
+                  onChange={(e) => setUpdateBody(e.target.value)}
+                  placeholder="Share an update with your guests…"
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                {updateImagePreview && (
+                  <div className="relative">
+                    <img src={updateImagePreview} alt="" className="rounded-xl w-full max-h-48 object-cover" />
+                    <button
+                      onClick={() => { setUpdateImage(null); setUpdateImagePreview(null); }}
+                      className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-background/80 backdrop-blur-sm"
+                    >
+                      <X className="h-3.5 w-3.5 text-foreground" strokeWidth={1.5} />
+                    </button>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => updateImageRef.current?.click()}
+                    className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <ImagePlus className="h-4 w-4" strokeWidth={1.5} />
+                    <span className="label-meta">Add photo</span>
+                  </button>
+                  <input
+                    ref={updateImageRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setUpdateImage(file);
+                        setUpdateImagePreview(URL.createObjectURL(file));
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handlePostUpdate}
+                    disabled={!updateBody.trim() || isPostingUpdate}
+                    className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 transition-all hover:opacity-90 disabled:opacity-50"
+                  >
+                    {isPostingUpdate ? (
+                      <Loader2 className="h-4 w-4 text-primary-foreground animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
+                    )}
+                    <span className="label-meta text-primary-foreground">Post</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {updates.length === 0 && !isHost ? (
               <p className="text-sm text-muted-foreground text-center py-6">
                 No updates yet.
               </p>
-            ) : (
+            ) : updates.length === 0 && isHost ? null : (
               updates.map((update: any) => {
                 const author = update.profiles;
                 return (
@@ -468,6 +619,60 @@ const EventDetail = () => {
                   </div>
                 );
               })
+            )}
+          </div>
+        )}
+
+        {tab === "photos" && (
+          <div className="space-y-4">
+            {/* Upload button */}
+            <button
+              onClick={() => photoInputRef.current?.click()}
+              disabled={photoUploading}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card py-6 transition-colors hover:bg-background"
+            >
+              {photoUploading ? (
+                <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+              ) : (
+                <Camera className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
+              )}
+              <span className="text-sm text-muted-foreground">
+                {photoUploading ? "Uploading…" : "Add a photo"}
+              </span>
+            </button>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handlePhotoUpload(file);
+              }}
+            />
+
+            {/* Photo grid */}
+            {photos.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No photos yet — be the first to share!
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {photos.map((photo: any) => (
+                  <div key={photo.id} className="relative rounded-xl overflow-hidden aspect-square">
+                    <img
+                      src={photo.image_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent p-2">
+                      <span className="text-[10px] text-white/80">
+                        {photo.profiles?.full_name || "Member"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
