@@ -834,24 +834,30 @@ const EventDetail = () => {
             const googleUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(event.title)}&dates=${fmtGoogle(start)}/${fmtGoogle(end)}${event.location ? `&location=${encodeURIComponent(event.location)}` : ""}${event.description ? `&details=${encodeURIComponent(event.description.substring(0, 500))}` : ""}`;
 
             return (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={downloadIcs}
-                  className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 transition-colors hover:bg-background"
-                >
-                  <CalendarPlus className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-                  <span className="text-sm text-muted-foreground">Add to Calendar</span>
-                </button>
-                <a
-                  href={googleUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 transition-colors hover:bg-background"
-                >
-                  <CalendarPlus className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-                  <span className="text-sm text-muted-foreground">Google Calendar</span>
-                </a>
-              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 transition-colors hover:bg-background">
+                    <CalendarPlus className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                    <span className="text-sm text-muted-foreground">Add to Calendar</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-1" align="start">
+                  <button
+                    onClick={downloadIcs}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-accent"
+                  >
+                    Apple Calendar
+                  </button>
+                  <a
+                    href={googleUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-accent"
+                  >
+                    Google Calendar
+                  </a>
+                </PopoverContent>
+              </Popover>
             );
           })()}
 
