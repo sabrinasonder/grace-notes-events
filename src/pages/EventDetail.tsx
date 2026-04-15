@@ -455,31 +455,56 @@ const EventDetail = () => {
         </div>
       )}
 
-      {/* Paid events — checkout or paid confirmation */}
+      {/* Paid events — embedded checkout or paid confirmation */}
       {!isFree && !isHost && (
-        <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-lg z-20">
-          <div className="mx-auto max-w-lg px-5 py-4">
-            {myRsvp?.paid ? (
-              <div className="flex items-center justify-center gap-2 rounded-full bg-primary py-3">
-                <Check className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
-                <span className="label-meta text-primary-foreground">
-                  You're going — Paid
-                </span>
+        <>
+          {showCheckout && !myRsvp?.paid && (
+            <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto">
+              <div className="mx-auto max-w-lg px-5 pt-12 pb-8">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="font-display text-xl text-foreground">Complete Payment</h2>
+                  <button
+                    onClick={() => setShowCheckout(false)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-card border border-border"
+                  >
+                    <X className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+                  </button>
+                </div>
+                <PaymentTestModeBanner />
+                <div className="mt-4 rounded-2xl overflow-hidden border border-border">
+                  <EmbeddedCheckoutProvider
+                    stripe={getStripe()}
+                    options={{ fetchClientSecret }}
+                  >
+                    <EmbeddedCheckout />
+                  </EmbeddedCheckoutProvider>
+                </div>
               </div>
-            ) : (
-              <button
-                onClick={handleCheckout}
-                disabled={checkingOut}
-                className="w-full flex items-center justify-center gap-2 rounded-full bg-primary py-3.5 transition-all hover:opacity-90 disabled:opacity-50"
-              >
-                <DollarSign className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
-                <span className="label-meta text-primary-foreground">
-                  {checkingOut ? "Redirecting…" : `Pay $${(event.price_cents / 100).toFixed(0)} & RSVP`}
-                </span>
-              </button>
-            )}
+            </div>
+          )}
+          <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-lg z-20">
+            <div className="mx-auto max-w-lg px-5 py-4">
+              {myRsvp?.paid ? (
+                <div className="flex items-center justify-center gap-2 rounded-full bg-primary py-3">
+                  <Check className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
+                  <span className="label-meta text-primary-foreground">
+                    You're going — Paid
+                  </span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowCheckout(true)}
+                  className="w-full flex items-center justify-center gap-2 rounded-full bg-primary py-3.5 transition-all hover:opacity-90"
+                >
+                  <DollarSign className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
+                  <span className="label-meta text-primary-foreground">
+                    {`Pay $${(event.price_cents / 100).toFixed(0)} & RSVP`}
+                  </span>
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Host sees a subtle label */}
