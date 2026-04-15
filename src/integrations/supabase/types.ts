@@ -713,6 +713,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      approve_rsvp_request: {
+        Args: { _host_id: string; _request_id: string }
+        Returns: boolean
+      }
       auto_complete_events: { Args: never; Returns: number }
       can_access_event_chat: {
         Args: { _event_id: string; _user_id: string }
