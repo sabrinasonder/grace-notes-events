@@ -134,8 +134,8 @@ const Settings = () => {
             sms_reminders: true,
             host_announcements_email: true,
             host_announcements_sms: true,
-            [field]: value,
-          });
+            ...({ [field]: value } as any),
+          } as any);
         if (error) throw error;
       }
       queryClient.invalidateQueries({ queryKey: ["notification_prefs", user.id] });
