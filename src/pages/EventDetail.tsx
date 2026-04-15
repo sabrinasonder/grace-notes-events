@@ -513,6 +513,8 @@ const EventDetail = () => {
       <div className="mx-auto max-w-lg px-5 mt-5">
         {tab === "about" && (
           <div className="space-y-6">
+            <div className="space-y-2">
+              <h3 className="label-meta text-muted-foreground">Event Description</h3>
             {event.description ? (
               <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
                 {event.description}
