@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -23,6 +23,8 @@ import {
   Camera,
   Loader2,
   Download,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -47,9 +49,9 @@ const EventDetail = () => {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState<TabKey>("about");
   const [showCheckout, setShowCheckout] = useState(false);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  // Fetch event
+
   const { data: event, isLoading } = useQuery({
     queryKey: ["event", id],
     queryFn: async () => {
@@ -108,7 +110,18 @@ const EventDetail = () => {
     enabled: !!id && !!user,
   });
 
-  // Current user's RSVP
+  // Keyboard navigation for lightbox
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") setLightboxIndex((i) => (i !== null && i > 0 ? i - 1 : i));
+      if (e.key === "ArrowRight") setLightboxIndex((i) => (i !== null && i < photos.length - 1 ? i + 1 : i));
+      if (e.key === "Escape") setLightboxIndex(null);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [lightboxIndex, photos]);
+
   const myRsvp = rsvps.find((r: any) => r.user_id === user?.id);
 
   // Post an update (host only)
@@ -660,11 +673,11 @@ const EventDetail = () => {
               </p>
             ) : (
               <div className="grid grid-cols-2 gap-2">
-                {photos.map((photo: any) => (
+                {photos.map((photo: any, idx: number) => (
                   <div
                     key={photo.id}
                     className="relative rounded-xl overflow-hidden aspect-square cursor-pointer"
-                    onDoubleClick={() => setLightboxUrl(photo.image_url)}
+                    onDoubleClick={() => setLightboxIndex(idx)}
                   >
                     <img
                       src={photo.image_url}
@@ -785,39 +798,69 @@ const EventDetail = () => {
         </>
       )}
 
-      {/* Photo lightbox */}
-      {lightboxUrl && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm"
-          onClick={() => setLightboxUrl(null)}
-        >
-          <div className="absolute top-12 right-5 flex gap-3">
-            <a
-              href={lightboxUrl}
-              download
-              target="_blank"
-              rel="noopener noreferrer"
+      {/* Photo lightbox carousel */}
+      {lightboxIndex !== null && photos && photos.length > 0 && (() => {
+        const currentPhoto = photos[lightboxIndex];
+        if (!currentPhoto) return null;
+        const lightboxUrl = currentPhoto.image_url;
+        const hasPrev = lightboxIndex > 0;
+        const hasNext = lightboxIndex < photos.length - 1;
+        return (
+          <div
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm"
+            onClick={() => setLightboxIndex(null)}
+          >
+            <div className="absolute top-12 right-5 flex gap-3">
+              <a
+                href={lightboxUrl}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-sm transition-colors hover:bg-white/25"
+              >
+                <Download className="h-5 w-5 text-white" strokeWidth={1.5} />
+              </a>
+              <button
+                onClick={() => setLightboxIndex(null)}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-sm transition-colors hover:bg-white/25"
+              >
+                <X className="h-5 w-5 text-white" strokeWidth={1.5} />
+              </button>
+            </div>
+
+            {/* Prev button */}
+            {hasPrev && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setLightboxIndex(lightboxIndex - 1); }}
+                className="absolute left-4 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-sm transition-colors hover:bg-white/25"
+              >
+                <ChevronLeft className="h-6 w-6 text-white" />
+              </button>
+            )}
+
+            {/* Next button */}
+            {hasNext && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setLightboxIndex(lightboxIndex + 1); }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-sm transition-colors hover:bg-white/25"
+              >
+                <ChevronRight className="h-6 w-6 text-white" />
+              </button>
+            )}
+
+            <img
+              src={lightboxUrl}
+              alt=""
+              className="max-h-[80vh] max-w-[90vw] rounded-xl object-contain"
               onClick={(e) => e.stopPropagation()}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-sm transition-colors hover:bg-white/25"
-            >
-              <Download className="h-5 w-5 text-white" strokeWidth={1.5} />
-            </a>
-            <button
-              onClick={() => setLightboxUrl(null)}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-sm transition-colors hover:bg-white/25"
-            >
-              <X className="h-5 w-5 text-white" strokeWidth={1.5} />
-            </button>
+            />
+            <p className="mt-4 label-meta text-white/60">
+              {lightboxIndex + 1} / {photos.length} · swipe or use arrows · tap outside to close
+            </p>
           </div>
-          <img
-            src={lightboxUrl}
-            alt=""
-            className="max-h-[80vh] max-w-[90vw] rounded-xl object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <p className="mt-4 label-meta text-white/60">Double-tap photo to preview · tap outside to close</p>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
