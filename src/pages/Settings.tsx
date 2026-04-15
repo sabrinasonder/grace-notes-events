@@ -311,7 +311,7 @@ const NotifToggle = ({
       disabled={disabled}
       className={cn(
         "relative h-6 w-11 rounded-full transition-colors",
-        checked ? "bg-primary" : "bg-border"
+        checked ? "bg-border" : "bg-primary"
       )}
     >
       <span
