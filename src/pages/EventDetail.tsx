@@ -34,6 +34,8 @@ import {
   Globe,
   UserPlus,
   Search,
+  CalendarPlus,
+  ExternalLink,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
