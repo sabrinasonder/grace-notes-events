@@ -524,6 +524,7 @@ const EventDetail = () => {
                 No description provided.
               </p>
             )}
+            </div>
 
             {/* Photo gallery on About tab */}
             {photos.length > 0 && (
