@@ -29,6 +29,9 @@ import {
   MoreHorizontal,
   Pencil,
   Ban,
+  Lock,
+  UserCheck,
+  Globe,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -57,6 +60,7 @@ const EventDetail = () => {
   const [showHostMenu, setShowHostMenu] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [requestMessage, setRequestMessage] = useState("");
 
 
   const { data: event, isLoading } = useQuery({
@@ -80,6 +84,20 @@ const EventDetail = () => {
       const { data, error } = await supabase
         .from("rsvps")
         .select("*, profiles!rsvps_user_id_fkey(full_name, avatar_url)")
+        .eq("event_id", id!);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!id && !!user,
+  });
+
+  // Fetch RSVP requests (for host view + user's own request)
+  const { data: rsvpRequests = [] } = useQuery({
+    queryKey: ["rsvp_requests", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("rsvp_requests")
+        .select("*, profiles:user_id(full_name, avatar_url)")
         .eq("event_id", id!);
       if (error) throw error;
       return data || [];
@@ -130,6 +148,8 @@ const EventDetail = () => {
   }, [lightboxIndex, photos]);
 
   const myRsvp = rsvps.find((r: any) => r.user_id === user?.id);
+  const myRequest = rsvpRequests.find((r: any) => r.user_id === user?.id);
+  const pendingRequests = rsvpRequests.filter((r: any) => r.status === "pending");
   const canChatEarly = event?.host_id === user?.id || myRsvp?.status === "going" || myRsvp?.status === "maybe";
   const unreadChatCount = useUnreadChatCount(id, user?.id, !!canChatEarly);
   const queryClient2 = useQueryClient();
@@ -156,6 +176,64 @@ const EventDetail = () => {
       setIsCancelling(false);
     }
   };
+
+  // Request to join mutation
+  const requestToJoinMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("rsvp_requests").insert({
+        event_id: id!,
+        user_id: user!.id,
+        message: requestMessage.trim() || null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["rsvp_requests", id] });
+      setRequestMessage("");
+      toast({ title: "Request sent!", description: "The host will review your request." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Request failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // Approve request mutation (host)
+  const approveRequestMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      const { data, error } = await supabase.rpc("approve_rsvp_request", {
+        _request_id: requestId,
+        _host_id: user!.id,
+      });
+      if (error) throw error;
+      if (!data) throw new Error("Could not approve request");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["rsvp_requests", id] });
+      queryClient.invalidateQueries({ queryKey: ["rsvps", id] });
+      toast({ title: "Request approved" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Approval failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  // Decline request mutation (host)
+  const declineRequestMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      const { error } = await supabase
+        .from("rsvp_requests")
+        .update({ status: "declined", decided_by: user!.id, decided_at: new Date().toISOString() })
+        .eq("id", requestId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["rsvp_requests", id] });
+      toast({ title: "Request declined" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Decline failed", description: err.message, variant: "destructive" });
+    },
+  });
 
   // Post an update (host only)
   const handlePostUpdate = async () => {
@@ -376,12 +454,18 @@ const EventDetail = () => {
   const spotsLeft =
     event.capacity != null ? event.capacity - goingRsvps.length : null;
 
+  // Determine if this is a request_to_join event and user needs to request access
+  const isRequestToJoin = event.privacy === "request_to_join";
+  const needsRequestToJoin = isRequestToJoin && !isHost && !myRsvp;
+  const hasPendingRequest = myRequest?.status === "pending";
+  const wasDeclined = myRequest?.status === "declined";
+
   const canChat = isHost || myRsvp?.status === "going" || myRsvp?.status === "maybe";
 
   const chatLabel = unreadChatCount > 0 ? `Chat (${unreadChatCount})` : "Chat";
   const tabs: { key: TabKey; label: string; hasUnread?: boolean }[] = [
     { key: "about", label: "About" },
-    { key: "guests", label: `Guests (${goingRsvps.length})` },
+    { key: "guests", label: `Guests (${goingRsvps.length})${isHost && pendingRequests.length > 0 ? ` · ${pendingRequests.length} pending` : ""}` },
     ...(canChat ? [{ key: "chat" as TabKey, label: chatLabel, hasUnread: unreadChatCount > 0 }] : []),
     { key: "updates", label: `Updates (${updates.length})` },
   ];
@@ -407,6 +491,14 @@ const EventDetail = () => {
       icon: <X className="h-4 w-4" strokeWidth={1.5} />,
     },
   ];
+
+  // Privacy badge
+  const privacyBadge = event.privacy === "invite_only"
+    ? { icon: Lock, label: "Invite Only" }
+    : event.privacy === "request_to_join"
+    ? { icon: UserCheck, label: "Request to Join" }
+    : { icon: Globe, label: "Open" };
+  const PrivacyIcon = privacyBadge.icon;
 
   return (
     <div className="min-h-screen bg-background pb-32">
@@ -517,7 +609,7 @@ const EventDetail = () => {
       <div className="mx-auto max-w-lg px-5 -mt-6 relative z-10">
         <div className="space-y-4">
           {/* Status pills */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {event.status === 'cancelled' && (
               <span className="pill-tag bg-destructive text-destructive-foreground">
                 Cancelled
@@ -531,6 +623,11 @@ const EventDetail = () => {
                 Payment required
               </span>
             )}
+            {/* Privacy badge */}
+            <span className="pill-tag border border-border text-muted-foreground flex items-center gap-1">
+              <PrivacyIcon className="h-3 w-3" strokeWidth={1.5} />
+              {privacyBadge.label}
+            </span>
           </div>
 
           <h1 className="font-display text-3xl text-foreground leading-tight">
@@ -691,6 +788,71 @@ const EventDetail = () => {
 
         {tab === "guests" && (
           <div className="space-y-6">
+            {/* Host: pending requests section */}
+            {isHost && pendingRequests.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="label-meta text-accent">
+                  Pending Requests ({pendingRequests.length})
+                </h3>
+                <div className="space-y-2">
+                  {pendingRequests.map((req: any) => {
+                    const profile = req.profiles;
+                    return (
+                      <div
+                        key={req.id}
+                        className="rounded-2xl border border-accent/30 bg-card p-4 space-y-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          {profile?.avatar_url ? (
+                            <img
+                              src={profile.avatar_url}
+                              alt=""
+                              className="h-8 w-8 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="h-8 w-8 rounded-full bg-accent/30 flex items-center justify-center text-sm font-semibold text-foreground">
+                              {(profile?.full_name || "?")[0]}
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground">
+                              {profile?.full_name || "Member"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {format(new Date(req.created_at), "MMM d · h:mm a")}
+                            </p>
+                          </div>
+                        </div>
+                        {req.message && (
+                          <p className="text-sm text-muted-foreground italic">
+                            "{req.message}"
+                          </p>
+                        )}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => approveRequestMutation.mutate(req.id)}
+                            disabled={approveRequestMutation.isPending || declineRequestMutation.isPending}
+                            className="flex-1 flex items-center justify-center gap-1.5 rounded-full bg-primary py-2.5 text-primary-foreground transition-all hover:opacity-90 disabled:opacity-50"
+                          >
+                            <Check className="h-4 w-4" strokeWidth={1.5} />
+                            <span className="label-meta">Approve</span>
+                          </button>
+                          <button
+                            onClick={() => declineRequestMutation.mutate(req.id)}
+                            disabled={approveRequestMutation.isPending || declineRequestMutation.isPending}
+                            className="flex-1 flex items-center justify-center gap-1.5 rounded-full border border-border bg-card py-2.5 text-muted-foreground transition-all hover:text-foreground disabled:opacity-50"
+                          >
+                            <X className="h-4 w-4" strokeWidth={1.5} />
+                            <span className="label-meta">Decline</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Host dashboard stats — only for host on paid events */}
             {isHost && !isFree && (
               <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
@@ -764,7 +926,7 @@ const EventDetail = () => {
                 rsvps={declinedRsvps}
               />
             )}
-            {rsvps.length === 0 && (
+            {rsvps.length === 0 && pendingRequests.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-6">
                 No RSVPs yet — be the first!
               </p>
@@ -916,8 +1078,49 @@ const EventDetail = () => {
         )}
       </div>
 
-      {/* RSVP bar — free events (hosts included) */}
-      {isFree && event.status !== 'cancelled' && (
+      {/* Bottom bar: Request to Join flow for request_to_join events */}
+      {needsRequestToJoin && event.status !== 'cancelled' && (
+        <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-lg z-20">
+          <div className="mx-auto max-w-lg px-5 py-4">
+            {hasPendingRequest ? (
+              <div className="flex items-center justify-center gap-2 rounded-full border border-accent bg-accent/10 py-3">
+                <Clock className="h-4 w-4 text-accent" strokeWidth={1.5} />
+                <span className="label-meta text-accent">Request pending — waiting for host</span>
+              </div>
+            ) : wasDeclined ? (
+              <div className="flex items-center justify-center gap-2 rounded-full border border-destructive/30 bg-destructive/5 py-3">
+                <X className="h-4 w-4 text-destructive" strokeWidth={1.5} />
+                <span className="label-meta text-destructive">Your request was declined</span>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={requestMessage}
+                  onChange={(e) => setRequestMessage(e.target.value)}
+                  placeholder="Add a note (optional)"
+                  className="w-full rounded-2xl border border-border bg-card px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/40 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors"
+                />
+                <button
+                  onClick={() => requestToJoinMutation.mutate()}
+                  disabled={requestToJoinMutation.isPending}
+                  className="w-full flex items-center justify-center gap-2 rounded-full bg-primary py-3.5 transition-all hover:opacity-90 disabled:opacity-50"
+                >
+                  {requestToJoinMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 text-primary-foreground animate-spin" />
+                  ) : (
+                    <UserCheck className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
+                  )}
+                  <span className="label-meta text-primary-foreground">Request to Join</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* RSVP bar — free events (not request_to_join without access) */}
+      {isFree && event.status !== 'cancelled' && !needsRequestToJoin && (
         <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-lg z-20">
           <div className="mx-auto max-w-lg px-5 py-4">
             {isHost && (
@@ -952,8 +1155,8 @@ const EventDetail = () => {
         </div>
       )}
 
-      {/* Paid events — embedded checkout or paid confirmation (hosts included) */}
-      {!isFree && event.status !== 'cancelled' && (
+      {/* Paid events — embedded checkout or paid confirmation (not request_to_join without access) */}
+      {!isFree && event.status !== 'cancelled' && !needsRequestToJoin && (
         <>
           {showCheckout && !myRsvp?.paid && (
             <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto">
