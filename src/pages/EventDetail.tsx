@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, Navigate, useNavigate } from "react-router-dom";
+import { useFavorites } from "@/hooks/use-favorites";
 import { useAuth } from "@/lib/auth";
 import { EventChat, useUnreadChatCount } from "@/components/EventChat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -70,6 +71,7 @@ const EventDetail = () => {
   const [requestMessage, setRequestMessage] = useState("");
   const [showInviteMembers, setShowInviteMembers] = useState(false);
   const [inviteSearch, setInviteSearch] = useState("");
+  const { isFavorited, toggleFavorite } = useFavorites();
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["event", id],
@@ -622,6 +624,14 @@ const EventDetail = () => {
                 </div>
               )}
             </div>
+          )}
+          {id && (
+            <button
+              onClick={() => toggleFavorite(id)}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 backdrop-blur-sm"
+            >
+              <Heart className="h-4 w-4" strokeWidth={1.5} fill={isFavorited(id) ? "#D89B86" : "none"} color={isFavorited(id) ? "#D89B86" : "#3A2A20"} />
+            </button>
           )}
           <button
             onClick={() => navigate("/")}

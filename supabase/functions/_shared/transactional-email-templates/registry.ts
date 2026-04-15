@@ -18,6 +18,7 @@ import { template as circleInvite } from './circle-invite.tsx'
 import { template as joinRequestApproved } from './join-request-approved.tsx'
 import { template as joinRequestDeclined } from './join-request-declined.tsx'
 import { template as eventInvite } from './event-invite.tsx'
+import { template as heartReminder } from './heart-reminder.tsx'
 
 export const TEMPLATES: Record<string, TemplateEntry> = {
   'rsvp-confirmation': rsvpConfirmation,
@@ -29,4 +30,5 @@ export const TEMPLATES: Record<string, TemplateEntry> = {
   'join-request-approved': joinRequestApproved,
   'join-request-declined': joinRequestDeclined,
   'event-invite': eventInvite,
+  'heart-reminder': heartReminder,
 }
