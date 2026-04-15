@@ -13,6 +13,7 @@ import Settings from "./pages/Settings.tsx";
 import Archive from "./pages/Archive.tsx";
 import InviteFriend from "./pages/InviteFriend.tsx";
 import AcceptInvite from "./pages/AcceptInvite.tsx";
+import HeartedEvents from "./pages/HeartedEvents.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/archive" element={<Archive />} />
             <Route path="/invite" element={<InviteFriend />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />
+            <Route path="/hearted" element={<HeartedEvents />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
