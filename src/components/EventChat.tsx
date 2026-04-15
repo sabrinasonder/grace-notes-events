@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Send, ImagePlus, X, Loader2, Reply, Trash2 } from "lucide-react";
@@ -41,7 +41,7 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProp
   const isNearBottom = useRef(true);
 
   // Fetch messages
-  const { data: messages = [], isLoading } = useQuery({
+  const { data: messages = [], isLoading, isError, error } = useQuery({
     queryKey: ["chat_messages", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -52,16 +52,16 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProp
         .order("created_at", { ascending: true });
       if (error) throw error;
 
-      // Fetch replied messages separately
-      const replyIds = (data || []).filter((m: any) => m.reply_to_id).map((m: any) => m.reply_to_id);
+      const replyIds = Array.from(new Set((data || []).flatMap((m: any) => (m.reply_to_id ? [m.reply_to_id] : []))));
       let repliedMap: Record<string, any> = {};
       if (replyIds.length > 0) {
-        const { data: replies } = await supabase
+        const { data: replies, error: repliesError } = await supabase
           .from("messages")
           .select("id, body, profiles!messages_sender_id_fkey(full_name)")
           .in("id", replyIds);
+        if (repliesError) throw repliesError;
         if (replies) {
-          for (const r of replies) repliedMap[r.id] = r;
+          repliedMap = Object.fromEntries(replies.map((reply: any) => [reply.id, reply]));
         }
       }
 
@@ -126,16 +126,39 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProp
         imageUrl = urlData.publicUrl;
       }
 
-      const { error } = await supabase.from("messages").insert({
-        event_id: eventId,
-        sender_id: userId,
-        body: body.trim(),
-        image_url: imageUrl,
-        reply_to_id: replyTo?.id || null,
-      });
+      const trimmedBody = body.trim();
+      const { data: insertedMessage, error } = await supabase
+        .from("messages")
+        .insert({
+          event_id: eventId,
+          sender_id: userId,
+          body: trimmedBody,
+          image_url: imageUrl,
+          reply_to_id: replyTo?.id || null,
+        })
+        .select("*, profiles!messages_sender_id_fkey(full_name, avatar_url)")
+        .maybeSingle();
       if (error) throw error;
 
-      // If image was posted, also add to event_photos
+      const optimisticMessage = insertedMessage
+        ? {
+            ...insertedMessage,
+            replied: replyTo
+              ? {
+                  id: replyTo.id,
+                  body: replyTo.body,
+                  profiles: replyTo.profiles ?? null,
+                }
+              : null,
+          }
+        : null;
+
+      if (optimisticMessage) {
+        queryClient.setQueryData(["chat_messages", eventId], (current: any[] = []) => [...current, optimisticMessage]);
+      } else {
+        queryClient.invalidateQueries({ queryKey: ["chat_messages", eventId] });
+      }
+
       if (imageUrl) {
         try {
           await supabase.from("event_photos").insert({
@@ -152,6 +175,7 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProp
       setImagePreview(null);
       setReplyTo(null);
       isNearBottom.current = true;
+      scrollToBottom();
     } catch (err: any) {
       toast({ title: "Failed to send", description: err.message, variant: "destructive" });
     } finally {
