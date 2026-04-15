@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { format, isToday, addDays, isBefore } from "date-fns";
-import { Plus, Calendar, MapPin, Users, Archive, UserPlus } from "lucide-react";
+import { Plus, Calendar, MapPin, Users, UserPlus, Settings, LogOut, Archive } from "lucide-react";
 
 type FilterTab = "all" | "hosting" | "attending";
 
@@ -48,16 +48,12 @@ const Index = () => {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="animate-pulse font-display text-2xl text-foreground">
-          Sonder Circle
-        </div>
+        <div className="animate-pulse font-serif text-2xl text-espresso">Sonder Circle</div>
       </div>
     );
   }
 
-  if (!user) {
-    return <Navigate to="/welcome" replace />;
-  }
+  if (!user) return <Navigate to="/welcome" replace />;
 
   const filters: { key: FilterTab; label: string }[] = [
     { key: "all", label: "All Events" },
@@ -65,7 +61,6 @@ const Index = () => {
     { key: "attending", label: "Attending" },
   ];
 
-  // Group events: This Week vs Coming Up
   const now = new Date();
   const endOfWeek = addDays(now, 7);
   const thisWeekEvents = events.filter((e: any) => isBefore(new Date(e.starts_at), endOfWeek));
@@ -76,89 +71,75 @@ const Index = () => {
     const hostProfile = event.profiles;
     const eventDate = new Date(event.starts_at);
     const isEventToday = isToday(eventDate);
+    const hostInitials = (hostProfile?.full_name || "?").split(" ").map((w: string) => w[0]).join("").substring(0, 2).toUpperCase();
 
     return (
       <button
         key={event.id}
         onClick={() => navigate(`/event/${event.id}`)}
-        className="w-full text-left rounded-3xl border border-border bg-card overflow-hidden transition-transform active:scale-[0.98]"
+        className="w-full text-left overflow-hidden transition-transform active:scale-[0.98]"
       >
         {/* Cover image */}
-        {event.cover_image_url ? (
-          <div className="h-44 w-full overflow-hidden">
-            <img
-              src={event.cover_image_url}
-              alt={event.title}
-              className="h-full w-full object-cover"
+        <div className="relative h-48 w-full overflow-hidden rounded-2xl">
+          {event.cover_image_url ? (
+            <img src={event.cover_image_url} alt={event.title} className="h-full w-full object-cover" />
+          ) : (
+            <div
+              className="h-full w-full"
+              style={{ background: "linear-gradient(135deg, #B5C2A3 0%, #7E8C6F 60%, #3A2A20 100%)" }}
             />
-          </div>
-        ) : (
-          <div className="h-32 w-full bg-secondary flex items-center justify-center">
-            <Calendar
-              className="h-10 w-10 text-muted-foreground/40"
-              strokeWidth={1}
-            />
-          </div>
-        )}
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
 
-        {/* Content */}
-        <div className="p-5 space-y-3">
-          {/* Date pill + Today pill + price */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="pill-tag bg-secondary text-foreground">
-                {format(eventDate, "MMM d · h:mm a")}
+          {/* Pills on image */}
+          <div className="absolute top-3 left-3 flex gap-1.5">
+            {isEventToday && (
+              <span className="rounded-full bg-blush px-2.5 py-0.5 font-sans text-[9px] font-semibold uppercase tracking-[0.2em] text-white">
+                Today
               </span>
-              {isEventToday && (
-                <span className="pill-tag bg-accent text-accent-foreground">
-                  Today
-                </span>
-              )}
-            </div>
-            <span className="pill-tag border border-border text-muted-foreground">
-              {event.price_cents > 0
-                ? `$${(event.price_cents / 100).toFixed(0)}`
-                : "Free"}
+            )}
+            <span className="rounded-full bg-cocoa/70 px-2.5 py-0.5 font-sans text-[9px] font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm">
+              {event.price_cents > 0 ? `$${(event.price_cents / 100).toFixed(0)}` : "Free"}
             </span>
           </div>
 
-          <h3 className="font-display text-xl text-foreground leading-tight">
-            {event.title}
-          </h3>
+          {/* Title overlay at bottom of image */}
+          <div className="absolute bottom-3 left-3 right-3">
+            <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.25em] text-white/70 mb-0.5">
+              {format(eventDate, "EEEE · h:mm a")}
+            </p>
+            <h3 className="font-serif text-[22px] font-light leading-tight text-white">
+              {event.title}
+            </h3>
+          </div>
+        </div>
 
-          {/* Meta row */}
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            {/* Host */}
-            <div className="flex items-center gap-1.5">
-              {hostProfile?.avatar_url ? (
-                <img
-                  src={hostProfile.avatar_url}
-                  alt=""
-                  className="h-5 w-5 rounded-full object-cover"
-                />
-              ) : (
-                <div className="h-5 w-5 rounded-full bg-accent/30 flex items-center justify-center text-[9px] font-semibold text-foreground">
-                  {(hostProfile?.full_name || "?")[0]}
-                </div>
-              )}
-              <span>{hostProfile?.full_name || "Host"}</span>
-            </div>
-
-            {/* Location */}
-            {event.location && (
-              <div className="flex items-center gap-1">
-                <MapPin className="h-3.5 w-3.5" strokeWidth={1.5} />
-                <span className="truncate max-w-[120px]">
-                  {event.location}
-                </span>
+        {/* Meta row below image */}
+        <div className="flex items-center gap-4 px-1 pt-3 pb-1">
+          {/* Host */}
+          <div className="flex items-center gap-1.5">
+            {hostProfile?.avatar_url ? (
+              <img src={hostProfile.avatar_url} alt="" className="h-5 w-5 rounded-full object-cover" />
+            ) : (
+              <div className="h-5 w-5 rounded-full bg-blush/30 flex items-center justify-center font-serif text-[8px] text-espresso">
+                {hostInitials}
               </div>
             )}
+            <span className="font-sans text-xs text-cocoa">{hostProfile?.full_name || "Host"}</span>
+          </div>
 
-            {/* Going count */}
-            <div className="flex items-center gap-1 ml-auto">
-              <Users className="h-3.5 w-3.5" strokeWidth={1.5} />
-              <span>{goingCount} going</span>
+          {/* Location */}
+          {event.location && (
+            <div className="flex items-center gap-1 text-taupe">
+              <MapPin className="h-3 w-3" strokeWidth={1.5} />
+              <span className="font-sans text-xs truncate max-w-[120px]">{event.location.split(",")[0]}</span>
             </div>
+          )}
+
+          {/* Going count */}
+          <div className="flex items-center gap-1 ml-auto text-taupe">
+            <Users className="h-3 w-3" strokeWidth={1.5} />
+            <span className="font-sans text-xs">{goingCount}</span>
           </div>
         </div>
       </button>
@@ -167,115 +148,109 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background pb-28">
-      {/* Account bar — top */}
-      <div className="sticky top-0 left-0 right-0 border-b border-border bg-background/80 backdrop-blur-lg z-20">
-        <div className="mx-auto flex max-w-lg items-center justify-center px-5 py-3">
-          <div className="flex gap-2">
-            <button
-              onClick={() => navigate("/invite")}
-              className="pill-tag border border-border bg-background text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
-            >
-              <UserPlus className="h-3 w-3" strokeWidth={1.5} />
-              Invite
-            </button>
-            <button
-              onClick={() => navigate("/archive")}
-              className="pill-tag border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Archive
-            </button>
-            <button
-              onClick={() => navigate("/settings")}
-              className="pill-tag border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Settings
-            </button>
-            <button
-              onClick={signOut}
-              className="pill-tag border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Sign out
-            </button>
-          </div>
+      {/* Top nav bar */}
+      <div className="sticky top-0 left-0 right-0 border-b border-cream bg-background/80 backdrop-blur-lg z-20">
+        <div className="mx-auto flex max-w-lg items-center justify-center px-6 py-3 gap-3">
+          <button
+            onClick={() => navigate("/invite")}
+            className="rounded-full bg-cream px-3 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-cocoa hover:bg-cream/80 transition-colors flex items-center gap-1.5"
+          >
+            <UserPlus className="h-3 w-3" strokeWidth={1.5} />
+            Invite
+          </button>
+          <button
+            onClick={() => navigate("/archive")}
+            className="rounded-full bg-cream px-3 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-cocoa hover:bg-cream/80 transition-colors flex items-center gap-1.5"
+          >
+            <Archive className="h-3 w-3" strokeWidth={1.5} />
+            Archive
+          </button>
+          <button
+            onClick={() => navigate("/settings")}
+            className="rounded-full bg-cream px-3 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-cocoa hover:bg-cream/80 transition-colors flex items-center gap-1.5"
+          >
+            <Settings className="h-3 w-3" strokeWidth={1.5} />
+            Settings
+          </button>
+          <button
+            onClick={signOut}
+            className="rounded-full bg-cream px-3 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-taupe hover:text-cocoa hover:bg-cream/80 transition-colors flex items-center gap-1.5"
+          >
+            <LogOut className="h-3 w-3" strokeWidth={1.5} />
+            Sign out
+          </button>
         </div>
       </div>
 
       {/* Header */}
-      <div className="px-5 pt-8 pb-6">
-        <div className="mx-auto max-w-lg space-y-1">
-          <p className="label-meta text-muted-foreground">Welcome back</p>
-          <h1 className="font-display text-3xl text-foreground">
+      <div className="px-6 pt-10 pb-2">
+        <div className="mx-auto max-w-lg">
+          <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.25em] text-taupe">Welcome back</p>
+          <h1 className="font-serif text-[34px] font-light tracking-tight text-espresso mt-1">
             Sonder Circle
           </h1>
         </div>
       </div>
 
-      {/* Filter pills */}
-      <div className="px-5 pb-6">
-        <div className="mx-auto flex max-w-lg gap-2">
+      {/* Filter tabs — flat editorial */}
+      <div className="px-6 pb-6 pt-4">
+        <div className="mx-auto max-w-lg flex border-b border-cream">
           {filters.map((f) => (
             <button
               key={f.key}
               onClick={() => setFilter(f.key)}
-              className={`pill-tag transition-colors ${
+              className={`relative px-3 py-2.5 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] transition-colors ${
                 filter === f.key
-                  ? "bg-primary text-primary-foreground"
-                  : "border border-border bg-background text-muted-foreground hover:text-foreground"
+                  ? "text-espresso"
+                  : "text-taupe hover:text-cocoa"
               }`}
             >
               {f.label}
+              {filter === f.key && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-cocoa" />
+              )}
             </button>
           ))}
         </div>
       </div>
 
       {/* Event cards */}
-      <div className="px-5">
-        <div className="mx-auto max-w-lg space-y-5">
+      <div className="px-6">
+        <div className="mx-auto max-w-lg space-y-8">
           {eventsLoading ? (
-            <div className="space-y-5">
+            <div className="space-y-6">
               {[1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="animate-pulse rounded-3xl bg-card h-72"
-                />
+                <div key={i} className="animate-pulse rounded-2xl bg-cream h-48" />
               ))}
             </div>
           ) : events.length === 0 ? (
-            <div className="rounded-3xl border border-border bg-card p-8 text-center space-y-4">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-secondary">
-                <Calendar className="h-6 w-6 text-foreground" strokeWidth={1.5} />
+            <div className="text-center py-16 space-y-5">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-cream">
+                <Calendar className="h-7 w-7 text-taupe" strokeWidth={1.5} />
               </div>
               <div className="space-y-2">
-                <h2 className="font-display text-xl text-foreground">
-                  No events on the calendar yet
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Be the first to host something.
-                </p>
+                <h2 className="font-serif text-xl text-espresso">No events on the calendar yet</h2>
+                <p className="font-serif italic text-sm text-taupe">Be the first to host something.</p>
               </div>
               <button
                 onClick={() => navigate("/create")}
-                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 transition-all hover:opacity-90"
+                className="inline-flex items-center gap-2 rounded-full bg-cocoa px-6 py-3 transition-all hover:opacity-90"
               >
-                <Plus className="h-4 w-4 text-primary-foreground" strokeWidth={2} />
-                <span className="label-meta text-primary-foreground">Create Event</span>
+                <Plus className="h-4 w-4 text-background" strokeWidth={2} />
+                <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-background">Create Event</span>
               </button>
             </div>
           ) : (
             <>
-              {/* This Week section */}
               {thisWeekEvents.length > 0 && (
-                <div className="space-y-4">
-                  <h2 className="label-meta text-muted-foreground">This Week</h2>
+                <div className="space-y-5">
+                  <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">This Week</p>
                   {thisWeekEvents.map(renderEventCard)}
                 </div>
               )}
-
-              {/* Coming Up section */}
               {comingUpEvents.length > 0 && (
-                <div className="space-y-4">
-                  <h2 className="label-meta text-muted-foreground">Coming Up</h2>
+                <div className="space-y-5">
+                  <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">Coming Up</p>
                   {comingUpEvents.map(renderEventCard)}
                 </div>
               )}
@@ -284,19 +259,18 @@ const Index = () => {
         </div>
       </div>
 
-      {/* FAB — Create event */}
+      {/* FAB */}
       <div className="fixed bottom-8 left-0 right-0 flex justify-center z-30 pointer-events-none">
         <button
           onClick={() => navigate("/create")}
-          className="pointer-events-auto flex items-center gap-2 rounded-full bg-primary px-6 py-3.5 shadow-lg transition-transform active:scale-95"
+          className="pointer-events-auto flex items-center gap-2 rounded-full bg-cocoa px-6 py-3.5 shadow-lg transition-transform active:scale-95"
         >
-          <Plus className="h-4 w-4 text-primary-foreground" strokeWidth={2} />
-          <span className="label-meta text-primary-foreground">
+          <Plus className="h-4 w-4 text-background" strokeWidth={2} />
+          <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-background">
             Create Event
           </span>
         </button>
       </div>
-
     </div>
   );
 };
