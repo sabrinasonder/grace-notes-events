@@ -17,3 +17,9 @@ project_id = "zenpfltyblaftzyklems"
     verify_jwt = false
   [functions.handle-email-suppression]
     verify_jwt = false
+  [functions.send-sms]
+    verify_jwt = true
+  [functions.sms-reminders]
+    verify_jwt = false
+  [functions.twilio-webhook]
+    verify_jwt = false
