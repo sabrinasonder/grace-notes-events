@@ -118,6 +118,32 @@ const EventDetail = () => {
     },
   });
 
+  const handleCheckout = async () => {
+    setCheckingOut(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: {
+          event_id: id,
+          success_url: window.location.href,
+          cancel_url: window.location.href,
+        },
+      });
+      if (error) throw error;
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("No checkout URL returned");
+      }
+    } catch (err: any) {
+      toast({
+        title: "Payment failed",
+        description: err.message,
+        variant: "destructive",
+      });
+      setCheckingOut(false);
+    }
+  };
+
   if (authLoading || isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
