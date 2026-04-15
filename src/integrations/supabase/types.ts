@@ -165,6 +165,7 @@ export type Database = {
           location: string | null
           price_cents: number
           starts_at: string
+          status: Database["public"]["Enums"]["event_status"]
           title: string
           updated_at: string
         }
@@ -179,6 +180,7 @@ export type Database = {
           location?: string | null
           price_cents?: number
           starts_at: string
+          status?: Database["public"]["Enums"]["event_status"]
           title: string
           updated_at?: string
         }
@@ -193,6 +195,7 @@ export type Database = {
           location?: string | null
           price_cents?: number
           starts_at?: string
+          status?: Database["public"]["Enums"]["event_status"]
           title?: string
           updated_at?: string
         }
@@ -571,6 +574,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      auto_complete_events: { Args: never; Returns: number }
       can_access_event_chat: {
         Args: { _event_id: string; _user_id: string }
         Returns: boolean
@@ -602,6 +606,7 @@ export type Database = {
       }
     }
     Enums: {
+      event_status: "active" | "cancelled" | "completed"
       rsvp_status: "going" | "maybe" | "declined"
     }
     CompositeTypes: {
@@ -730,6 +735,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      event_status: ["active", "cancelled", "completed"],
       rsvp_status: ["going", "maybe", "declined"],
     },
   },
