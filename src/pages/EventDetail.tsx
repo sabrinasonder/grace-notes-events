@@ -663,8 +663,11 @@ const EventDetail = () => {
                         </div>
                       )}
                       <span className="text-sm font-medium text-foreground">
-                        {author?.full_name || "Host"}
+                        {author?.full_name || "Member"}
                       </span>
+                      {update.author_id === event.host_id && (
+                        <span className="pill-tag bg-sage text-sage-foreground text-[10px] py-0.5 px-2">Host</span>
+                      )}
                       <span className="ml-auto text-xs text-muted-foreground">
                         {format(
                           new Date(update.created_at),
