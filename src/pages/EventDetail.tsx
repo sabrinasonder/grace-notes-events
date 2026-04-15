@@ -15,6 +15,9 @@ import {
   Check,
   HelpCircle,
   X,
+  Bell,
+  CircleDollarSign,
+  CircleAlert,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -353,10 +356,46 @@ const EventDetail = () => {
 
         {tab === "guests" && (
           <div className="space-y-6">
+            {/* Host dashboard stats — only for host on paid events */}
+            {isHost && !isFree && (
+              <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+                <h3 className="label-meta text-muted-foreground">Payment Overview</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-xl bg-background p-3 text-center">
+                    <p className="font-display text-2xl text-foreground">{goingRsvps.length}</p>
+                    <p className="label-meta text-muted-foreground mt-1">Going</p>
+                  </div>
+                  <div className="rounded-xl bg-background p-3 text-center">
+                    <p className="font-display text-2xl text-primary">{goingRsvps.filter((r: any) => r.paid).length}</p>
+                    <p className="label-meta text-muted-foreground mt-1">Paid</p>
+                  </div>
+                  <div className="rounded-xl bg-background p-3 text-center">
+                    <p className="font-display text-2xl text-destructive">{goingRsvps.filter((r: any) => !r.paid).length}</p>
+                    <p className="label-meta text-muted-foreground mt-1">Unpaid</p>
+                  </div>
+                </div>
+                {goingRsvps.filter((r: any) => !r.paid).length > 0 && (
+                  <button
+                    onClick={() => {
+                      toast({
+                        title: "Reminders queued",
+                        description: `Payment reminders will be sent to ${goingRsvps.filter((r: any) => !r.paid).length} unpaid guest(s).`,
+                      });
+                    }}
+                    className="w-full flex items-center justify-center gap-2 rounded-full border border-border bg-background py-3 transition-colors hover:bg-card"
+                  >
+                    <Bell className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+                    <span className="label-meta text-foreground">Send Payment Reminders</span>
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Going */}
             <GuestSection
               label={`Going (${goingRsvps.length})`}
               rsvps={goingRsvps}
+              showPaymentStatus={isHost && !isFree}
             />
             {/* Maybe */}
             {maybeRsvps.length > 0 && (
@@ -532,9 +571,11 @@ const EventDetail = () => {
 const GuestSection = ({
   label,
   rsvps,
+  showPaymentStatus = false,
 }: {
   label: string;
   rsvps: any[];
+  showPaymentStatus?: boolean;
 }) => (
   <div className="space-y-3">
     <h3 className="label-meta text-muted-foreground">{label}</h3>
@@ -560,6 +601,16 @@ const GuestSection = ({
             <span className="text-sm text-foreground">
               {profile?.full_name || "Member"}
             </span>
+            {showPaymentStatus && (
+              <span className={cn(
+                "ml-auto pill-tag",
+                rsvp.paid
+                  ? "bg-sage text-sage-foreground"
+                  : "border border-destructive/30 text-destructive"
+              )}>
+                {rsvp.paid ? "Paid" : "Unpaid"}
+              </span>
+            )}
           </div>
         );
       })}
