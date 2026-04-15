@@ -434,10 +434,13 @@ const EventDetail = () => {
         )}
       </div>
 
-      {/* RSVP bar — only for free events and non-hosts */}
-      {isFree && !isHost && (
+      {/* RSVP bar — free events (hosts included) */}
+      {isFree && (
         <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-lg z-20">
           <div className="mx-auto max-w-lg px-5 py-4">
+            {isHost && (
+              <p className="text-center label-meta text-muted-foreground mb-2">You're hosting this event</p>
+            )}
             <div className="flex gap-2">
               {rsvpButtons.map((btn) => {
                 const isActive = myRsvp?.status === btn.status;
@@ -467,8 +470,8 @@ const EventDetail = () => {
         </div>
       )}
 
-      {/* Paid events — embedded checkout or paid confirmation */}
-      {!isFree && !isHost && (
+      {/* Paid events — embedded checkout or paid confirmation (hosts included) */}
+      {!isFree && (
         <>
           {showCheckout && !myRsvp?.paid && (
             <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto">
@@ -496,6 +499,9 @@ const EventDetail = () => {
           )}
           <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-lg z-20">
             <div className="mx-auto max-w-lg px-5 py-4">
+              {isHost && (
+                <p className="text-center label-meta text-muted-foreground mb-2">You're hosting this event</p>
+              )}
               {myRsvp?.paid ? (
                 <div className="flex items-center justify-center gap-2 rounded-full bg-primary py-3">
                   <Check className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
@@ -517,17 +523,6 @@ const EventDetail = () => {
             </div>
           </div>
         </>
-      )}
-
-      {/* Host sees a subtle label */}
-      {isHost && (
-        <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-lg z-20">
-          <div className="mx-auto max-w-lg px-5 py-4 text-center">
-            <span className="label-meta text-muted-foreground">
-              You're hosting this event
-            </span>
-          </div>
-        </div>
       )}
     </div>
   );
