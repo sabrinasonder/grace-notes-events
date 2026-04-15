@@ -311,13 +311,13 @@ const NotifToggle = ({
       disabled={disabled}
       className={cn(
         "relative h-6 w-11 rounded-full transition-colors",
-        checked ? "bg-border" : "bg-primary"
+        checked ? "bg-primary" : "bg-border"
       )}
     >
       <span
         className={cn(
-          "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
-          checked ? "translate-x-5" : "translate-x-0.5"
+          "absolute top-0.5 h-5 w-5 rounded-full bg-background shadow-sm transition-all",
+          checked ? "left-[22px]" : "left-0.5"
         )}
       />
     </button>
