@@ -46,6 +46,7 @@ import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe
 import { getStripe, getStripeEnvironment } from "@/lib/stripe";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { BottomNav } from "@/components/BottomNav";
 
 type TabKey = "about" | "guests" | "chat" | "updates";
 
