@@ -516,12 +516,17 @@ const EventDetail = () => {
       {/* Event header */}
       <div className="mx-auto max-w-lg px-5 -mt-6 relative z-10">
         <div className="space-y-4">
-          {/* Price pill */}
+          {/* Status pills */}
           <div className="flex items-center gap-2">
+            {event.status === 'cancelled' && (
+              <span className="pill-tag bg-destructive text-destructive-foreground">
+                Cancelled
+              </span>
+            )}
             <span className="pill-tag bg-primary text-primary-foreground">
               {isFree ? "Free" : `$${(event.price_cents / 100).toFixed(0)}`}
             </span>
-            {!isFree && (
+            {!isFree && event.status !== 'cancelled' && (
               <span className="pill-tag border border-border text-muted-foreground">
                 Payment required
               </span>
