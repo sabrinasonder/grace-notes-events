@@ -134,6 +134,29 @@ const EventDetail = () => {
   const unreadChatCount = useUnreadChatCount(id, user?.id, !!canChatEarly);
   const queryClient2 = useQueryClient();
 
+  // Cancel event handler (host only)
+  const handleCancelEvent = async () => {
+    if (!user || !id || !event) return;
+    setIsCancelling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("cancel-event", {
+        body: {
+          eventId: id,
+          appUrl: window.location.origin,
+        },
+      });
+      if (error) throw error;
+      setShowCancelConfirm(false);
+      queryClient.invalidateQueries({ queryKey: ["event", id] });
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      toast({ title: "Event cancelled", description: "All guests have been notified." });
+    } catch (err: any) {
+      toast({ title: "Failed to cancel event", description: err.message, variant: "destructive" });
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   // Post an update (host only)
   const handlePostUpdate = async () => {
     if (!updateBody.trim() || !user || !id) return;
