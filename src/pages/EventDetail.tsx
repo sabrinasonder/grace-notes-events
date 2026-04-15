@@ -30,7 +30,6 @@ const EventDetail = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>("about");
-  const [checkingOut, setCheckingOut] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
 
   // Fetch event
