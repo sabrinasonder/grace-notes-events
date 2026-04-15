@@ -335,7 +335,7 @@ const EventDetail = () => {
   const tabs: { key: TabKey; label: string }[] = [
     { key: "about", label: "About" },
     { key: "guests", label: `Guests (${goingRsvps.length})` },
-    { key: "chat", label: "Chat" },
+    ...(canChat ? [{ key: "chat" as TabKey, label: "Chat" }] : []),
     { key: "updates", label: `Updates (${updates.length})` },
   ];
 
