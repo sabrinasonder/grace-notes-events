@@ -21,6 +21,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/welcome" element={<Welcome />} />
+            <Route path="/create" element={<CreateEvent />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
