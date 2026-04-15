@@ -209,7 +209,6 @@ const Archive = () => {
                       <h3 className="font-display text-base text-foreground leading-tight truncate">
                         {event.title}
                       </h3>
-                      </h3>
 
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
                         {event.location && (
