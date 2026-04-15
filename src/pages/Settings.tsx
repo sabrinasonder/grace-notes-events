@@ -15,6 +15,8 @@ const Settings = () => {
   const queryClient = useQueryClient();
 
   const [phone, setPhone] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
   const [verificationCode, setVerificationCode] = useState("");
   const [verifyStep, setVerifyStep] = useState<"idle" | "sent" | "verifying">("idle");
   const [isSavingPhone, setIsSavingPhone] = useState(false);
@@ -56,7 +58,26 @@ const Settings = () => {
 
   useEffect(() => {
     if (profile?.phone) setPhone(profile.phone);
+    if (profile?.full_name) setFullName(profile.full_name);
   }, [profile]);
+
+  const handleSaveName = async () => {
+    if (!fullName.trim() || !user) return;
+    setIsSavingName(true);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ full_name: fullName.trim() })
+        .eq("id", user.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["profile", user.id] });
+      toast({ title: "Name updated!" });
+    } catch (err: any) {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSavingName(false);
+    }
+  };
 
   const handleSendVerification = async () => {
     if (!phone.trim()) return;
@@ -177,9 +198,33 @@ const Settings = () => {
         {/* Profile info */}
         <div className="space-y-3">
           <h2 className="label-meta text-muted-foreground">Account</h2>
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
-            <p className="text-sm text-foreground">{profile?.full_name || "Member"}</p>
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
             <p className="text-xs text-muted-foreground">{user.email}</p>
+            <div className="space-y-1.5">
+              <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                Display Name
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Your name"
+                  className="flex-1 rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <button
+                  onClick={handleSaveName}
+                  disabled={!fullName.trim() || fullName === profile?.full_name || isSavingName}
+                  className="rounded-xl bg-primary px-4 py-2.5 transition-all hover:opacity-90 disabled:opacity-50"
+                >
+                  {isSavingName ? (
+                    <Loader2 className="h-4 w-4 text-primary-foreground animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
