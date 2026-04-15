@@ -1070,6 +1070,36 @@ const EventDetail = () => {
           </div>
         );
       })()}
+
+      {/* Cancel event confirmation modal */}
+      {showCancelConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-5">
+          <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 space-y-4">
+            <h2 className="font-display text-xl text-foreground">
+              Cancel {event.title}?
+            </h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              This will notify all guests and refund anyone who's paid. This can't be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCancelConfirm(false)}
+                disabled={isCancelling}
+                className="flex-1 rounded-full border border-border bg-card py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+              >
+                Keep event
+              </button>
+              <button
+                onClick={handleCancelEvent}
+                disabled={isCancelling}
+                className="flex-1 rounded-full bg-destructive py-3 text-sm font-medium text-destructive-foreground transition-colors hover:opacity-90 disabled:opacity-50"
+              >
+                {isCancelling ? "Cancelling…" : "Cancel event"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
