@@ -198,9 +198,33 @@ const Settings = () => {
         {/* Profile info */}
         <div className="space-y-3">
           <h2 className="label-meta text-muted-foreground">Account</h2>
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
-            <p className="text-sm text-foreground">{profile?.full_name || "Member"}</p>
+          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
             <p className="text-xs text-muted-foreground">{user.email}</p>
+            <div className="space-y-1.5">
+              <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                Display Name
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Your name"
+                  className="flex-1 rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <button
+                  onClick={handleSaveName}
+                  disabled={!fullName.trim() || fullName === profile?.full_name || isSavingName}
+                  className="rounded-xl bg-primary px-4 py-2.5 transition-all hover:opacity-90 disabled:opacity-50"
+                >
+                  {isSavingName ? (
+                    <Loader2 className="h-4 w-4 text-primary-foreground animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
