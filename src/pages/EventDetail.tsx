@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import { EventChat } from "@/components/EventChat";
+import { EventChat, useUnreadChatCount } from "@/components/EventChat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -124,6 +124,9 @@ const EventDetail = () => {
   }, [lightboxIndex, photos]);
 
   const myRsvp = rsvps.find((r: any) => r.user_id === user?.id);
+  const canChatEarly = event?.host_id === user?.id || myRsvp?.status === "going" || myRsvp?.status === "maybe";
+  const unreadChatCount = useUnreadChatCount(id, user?.id, !!canChatEarly);
+  const queryClient2 = useQueryClient();
 
   // Post an update (host only)
   const handlePostUpdate = async () => {
@@ -332,10 +335,11 @@ const EventDetail = () => {
 
   const canChat = isHost || myRsvp?.status === "going" || myRsvp?.status === "maybe";
 
-  const tabs: { key: TabKey; label: string }[] = [
+  const chatLabel = unreadChatCount > 0 ? `Chat (${unreadChatCount})` : "Chat";
+  const tabs: { key: TabKey; label: string; hasUnread?: boolean }[] = [
     { key: "about", label: "About" },
     { key: "guests", label: `Guests (${goingRsvps.length})` },
-    ...(canChat ? [{ key: "chat" as TabKey, label: "Chat" }] : []),
+    ...(canChat ? [{ key: "chat" as TabKey, label: chatLabel, hasUnread: unreadChatCount > 0 }] : []),
     { key: "updates", label: `Updates (${updates.length})` },
   ];
 
@@ -494,7 +498,12 @@ const EventDetail = () => {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <span className="label-meta">{t.label}</span>
+              <span className="label-meta relative">
+                {t.label}
+                {t.hasUnread && tab !== t.key && (
+                  <span className="absolute -top-1 -right-2 h-1.5 w-1.5 rounded-full bg-accent" />
+                )}
+              </span>
             </button>
           ))}
         </div>
@@ -755,6 +764,11 @@ const EventDetail = () => {
               userId={user.id}
               isHost={isHost}
               eventTitle={event.title}
+              onUnreadCountChange={(count) => {
+                if (count === 0) {
+                  queryClient2.invalidateQueries({ queryKey: ["chat_unread", id, user.id] });
+                }
+              }}
             />
           ) : (
             <div className="text-center py-12">
