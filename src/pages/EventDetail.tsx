@@ -71,6 +71,7 @@ const EventDetail = () => {
   const [requestMessage, setRequestMessage] = useState("");
   const [showInviteMembers, setShowInviteMembers] = useState(false);
   const [inviteSearch, setInviteSearch] = useState("");
+  const { isFavorited, toggleFavorite } = useFavorites();
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["event", id],
