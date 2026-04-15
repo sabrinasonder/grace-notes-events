@@ -12,9 +12,11 @@ export interface TemplateEntry {
 import { template as rsvpConfirmation } from './rsvp-confirmation.tsx'
 import { template as paymentReceipt } from './payment-receipt.tsx'
 import { template as hostUpdate } from './host-update.tsx'
+import { template as unreadMessagesDigest } from './unread-messages-digest.tsx'
 
 export const TEMPLATES: Record<string, TemplateEntry> = {
   'rsvp-confirmation': rsvpConfirmation,
   'payment-receipt': paymentReceipt,
   'host-update': hostUpdate,
+  'unread-messages-digest': unreadMessagesDigest,
 }
