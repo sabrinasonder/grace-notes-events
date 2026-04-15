@@ -1078,7 +1078,9 @@ const EventDetail = () => {
                   </div>
                 )}
               </div>
+            )}
 
+            {/* Host dashboard stats — only for host on paid events */}
             {isHost && !isFree && (
               <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
                 <h3 className="label-meta text-muted-foreground">Payment Overview</h3>
