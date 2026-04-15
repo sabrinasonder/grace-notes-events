@@ -138,6 +138,76 @@ const EventDetail = () => {
     enabled: !!id && !!user,
   });
 
+  // Fetch event invites
+  const { data: eventInvites = [] } = useQuery({
+    queryKey: ["event_invites", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_invites")
+        .select("*")
+        .eq("event_id", id!);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!id && !!user,
+  });
+
+  // Fetch all circle members for invite search (host only)
+  const { data: allMembers = [] } = useQuery({
+    queryKey: ["all_members"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url, email")
+        .order("full_name");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user && showInviteMembers,
+  });
+
+  // Invite member mutation
+  const inviteMemberMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      const { error } = await supabase.from("event_invites").insert({
+        event_id: id!,
+        invited_user_id: memberId,
+        invited_by: user!.id,
+      });
+      if (error) throw error;
+
+      // Send invite notification email
+      try {
+        const member = allMembers.find((m: any) => m.id === memberId);
+        if (member?.email && event) {
+          const hostName = user?.user_metadata?.full_name || "The host";
+          await supabase.functions.invoke("send-transactional-email", {
+            body: {
+              templateName: "event-invite",
+              recipientEmail: member.email,
+              idempotencyKey: `event-invite-${id}-${memberId}`,
+              templateData: {
+                eventTitle: event.title,
+                eventDate: format(new Date(event.starts_at), "EEEE, MMMM d 'at' h:mm a"),
+                hostName,
+                eventUrl: `${window.location.origin}/event/${id}`,
+              },
+            },
+          });
+        }
+      } catch (emailErr) {
+        console.error("Failed to send event invite email:", emailErr);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event_invites", id] });
+      toast({ title: "Invite sent!" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Invite failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   // Keyboard navigation for lightbox
   useEffect(() => {
     if (lightboxIndex === null) return;
