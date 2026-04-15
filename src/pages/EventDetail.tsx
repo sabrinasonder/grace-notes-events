@@ -571,7 +571,7 @@ const EventDetail = () => {
   })();
 
   return (
-    <div className="min-h-screen bg-background pb-36">
+    <div className="min-h-screen bg-background pb-44">
       {/* ── 1. HERO COVER ────────────────────────────────────────── */}
       <div className="relative h-72 w-full overflow-hidden">
         {event.cover_image_url ? (
@@ -1182,7 +1182,7 @@ const EventDetail = () => {
       {needsRequestToJoin && event.status !== "cancelled" && (
         <div className="fixed bottom-0 left-0 right-0 z-20">
           <div className="h-6 pointer-events-none" style={{ background: "linear-gradient(to top, hsl(37 60% 96%) 70%, transparent)" }} />
-          <div className="bg-background px-6 pb-6 pt-2">
+          <div className="bg-background px-6 pb-4 pt-1">
             <div className="mx-auto max-w-lg">
               {hasPendingRequest ? (
                 <div className="flex items-center justify-center gap-2 rounded-full border border-blush/30 bg-blush/10 py-3.5">
@@ -1226,7 +1226,7 @@ const EventDetail = () => {
       {isFree && event.status !== "cancelled" && !needsRequestToJoin && (
         <div className="fixed bottom-0 left-0 right-0 z-20">
           <div className="h-6 pointer-events-none" style={{ background: "linear-gradient(to top, hsl(37 60% 96%) 70%, transparent)" }} />
-          <div className="bg-background px-6 pb-6 pt-2">
+          <div className="bg-background px-6 pb-4 pt-1">
             <div className="mx-auto max-w-lg">
               {isHost ? (
                 /* Host: Manage Event */
@@ -1298,7 +1298,7 @@ const EventDetail = () => {
           )}
           <div className="fixed bottom-0 left-0 right-0 z-20">
             <div className="h-6 pointer-events-none" style={{ background: "linear-gradient(to top, hsl(37 60% 96%) 70%, transparent)" }} />
-            <div className="bg-background px-6 pb-6 pt-2">
+            <div className="bg-background px-6 pb-4 pt-1">
               <div className="mx-auto max-w-lg">
                 {isHost ? (
                   <div className="text-center space-y-2">
