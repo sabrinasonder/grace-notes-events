@@ -625,6 +625,14 @@ const EventDetail = () => {
               )}
             </div>
           )}
+          {id && (
+            <button
+              onClick={() => toggleFavorite(id)}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 backdrop-blur-sm"
+            >
+              <Heart className="h-4 w-4" strokeWidth={1.5} fill={isFavorited(id) ? "#D89B86" : "none"} color={isFavorited(id) ? "#D89B86" : "#3A2A20"} />
+            </button>
+          )}
           <button
             onClick={() => navigate("/")}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 backdrop-blur-sm"
