@@ -17,7 +17,9 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import type { Tables } from "@/integrations/supabase/types";
+import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
+import { getStripe, getStripeEnvironment } from "@/lib/stripe";
+import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 
 type TabKey = "about" | "guests" | "updates";
 
@@ -28,7 +30,7 @@ const EventDetail = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>("about");
-  const [checkingOut, setCheckingOut] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
 
   // Fetch event
   const { data: event, isLoading } = useQuery({
@@ -118,30 +120,17 @@ const EventDetail = () => {
     },
   });
 
-  const handleCheckout = async () => {
-    setCheckingOut(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: {
-          event_id: id,
-          success_url: window.location.href,
-          cancel_url: window.location.href,
-        },
-      });
-      if (error) throw error;
-      if (data?.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error("No checkout URL returned");
-      }
-    } catch (err: any) {
-      toast({
-        title: "Payment failed",
-        description: err.message,
-        variant: "destructive",
-      });
-      setCheckingOut(false);
-    }
+  const fetchClientSecret = async (): Promise<string> => {
+    const { data, error } = await supabase.functions.invoke("create-checkout", {
+      body: {
+        event_id: id,
+        return_url: `${window.location.origin}/event/${id}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+        environment: getStripeEnvironment(),
+      },
+    });
+    if (error) throw error;
+    if (!data?.clientSecret) throw new Error("Failed to create checkout session");
+    return data.clientSecret;
   };
 
   if (authLoading || isLoading) {
@@ -465,31 +454,56 @@ const EventDetail = () => {
         </div>
       )}
 
-      {/* Paid events — checkout or paid confirmation */}
+      {/* Paid events — embedded checkout or paid confirmation */}
       {!isFree && !isHost && (
-        <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-lg z-20">
-          <div className="mx-auto max-w-lg px-5 py-4">
-            {myRsvp?.paid ? (
-              <div className="flex items-center justify-center gap-2 rounded-full bg-primary py-3">
-                <Check className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
-                <span className="label-meta text-primary-foreground">
-                  You're going — Paid
-                </span>
+        <>
+          {showCheckout && !myRsvp?.paid && (
+            <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto">
+              <div className="mx-auto max-w-lg px-5 pt-12 pb-8">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="font-display text-xl text-foreground">Complete Payment</h2>
+                  <button
+                    onClick={() => setShowCheckout(false)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-card border border-border"
+                  >
+                    <X className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+                  </button>
+                </div>
+                <PaymentTestModeBanner />
+                <div className="mt-4 rounded-2xl overflow-hidden border border-border">
+                  <EmbeddedCheckoutProvider
+                    stripe={getStripe()}
+                    options={{ fetchClientSecret }}
+                  >
+                    <EmbeddedCheckout />
+                  </EmbeddedCheckoutProvider>
+                </div>
               </div>
-            ) : (
-              <button
-                onClick={handleCheckout}
-                disabled={checkingOut}
-                className="w-full flex items-center justify-center gap-2 rounded-full bg-primary py-3.5 transition-all hover:opacity-90 disabled:opacity-50"
-              >
-                <DollarSign className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
-                <span className="label-meta text-primary-foreground">
-                  {checkingOut ? "Redirecting…" : `Pay $${(event.price_cents / 100).toFixed(0)} & RSVP`}
-                </span>
-              </button>
-            )}
+            </div>
+          )}
+          <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-lg z-20">
+            <div className="mx-auto max-w-lg px-5 py-4">
+              {myRsvp?.paid ? (
+                <div className="flex items-center justify-center gap-2 rounded-full bg-primary py-3">
+                  <Check className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
+                  <span className="label-meta text-primary-foreground">
+                    You're going — Paid
+                  </span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowCheckout(true)}
+                  className="w-full flex items-center justify-center gap-2 rounded-full bg-primary py-3.5 transition-all hover:opacity-90"
+                >
+                  <DollarSign className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
+                  <span className="label-meta text-primary-foreground">
+                    {`Pay $${(event.price_cents / 100).toFixed(0)} & RSVP`}
+                  </span>
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Host sees a subtle label */}
