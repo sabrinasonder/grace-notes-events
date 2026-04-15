@@ -25,6 +25,7 @@ const App = () => (
             <Route path="/welcome" element={<Welcome />} />
             <Route path="/create" element={<CreateEvent />} />
             <Route path="/event/:id" element={<EventDetail />} />
+            <Route path="/unsubscribe" element={<Unsubscribe />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
