@@ -195,7 +195,7 @@ const EventDetail = () => {
           });
         }
       } catch (emailErr) {
-        console.error("Failed to send event invite email:", emailErr);
+        toast({ title: "Invite sent, but notification email failed", variant: "destructive" });
       }
     },
     onSuccess: () => {
@@ -337,7 +337,7 @@ const EventDetail = () => {
           }
         }
       } catch (emailErr) {
-        console.error("Failed to send decline email:", emailErr);
+        toast({ title: "Request declined, but notification email failed", variant: "destructive" });
       }
     },
     onSuccess: () => {

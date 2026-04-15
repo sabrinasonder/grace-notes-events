@@ -1,10 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 
 export function useFavorites() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: favorites = [] } = useQuery({
     queryKey: ["favorites", user?.id],
@@ -34,10 +36,7 @@ export function useFavorites() {
         const { error } = await supabase
           .from("event_favorites")
           .insert({ user_id: user!.id, event_id: eventId });
-        if (error) {
-          console.error("Failed to insert favorite:", error);
-          throw error;
-        }
+        if (error) throw error;
         return { action: "added" as const };
       }
     },
@@ -50,6 +49,7 @@ export function useFavorites() {
     },
     onError: (_err, _eventId, context) => {
       if (context?.prev) queryClient.setQueryData(["favorites", user?.id], context.prev);
+      toast({ title: "Could not update saved events", variant: "destructive" });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["favorites", user?.id] });

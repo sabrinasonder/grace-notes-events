@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const GOOGLE_MAPS_API_KEY = "AIzaSyBdR6f7V35-rpYIfMB4SXJqr7NrcjyoIaM";
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
 
 let googleMapsPromise: Promise<void> | null = null;
 

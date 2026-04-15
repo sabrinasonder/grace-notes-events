@@ -101,8 +101,15 @@ Deno.serve(async (req) => {
 
     for (const rsvp of paidRsvps) {
       try {
-        // Get the payment intent from the checkout session
-        const stripe = createStripeClient('sandbox')
+        // Look up the payment record to determine which Stripe environment was used
+        const { data: payment } = await supabase
+          .from('payments')
+          .select('stripe_environment')
+          .eq('stripe_session_id', rsvp.stripe_payment_id!)
+          .maybeSingle()
+
+        const stripeEnv = ((payment?.stripe_environment as StripeEnv) ?? 'sandbox')
+        const stripe = createStripeClient(stripeEnv)
         const session = await stripe.checkout.sessions.retrieve(rsvp.stripe_payment_id!)
         if (session.payment_intent) {
           const piId = typeof session.payment_intent === 'string'

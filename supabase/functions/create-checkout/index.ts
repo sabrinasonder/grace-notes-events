@@ -113,6 +113,7 @@ serve(async (req: Request) => {
       stripe_session_id: session.id,
       amount_cents: event.price_cents,
       status: "pending",
+      stripe_environment: env,
     });
 
     return new Response(JSON.stringify({ clientSecret: session.client_secret }), {

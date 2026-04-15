@@ -81,7 +81,6 @@ const Settings = () => {
 
   const handleSendVerification = async () => {
     if (!phone.trim()) return;
-    // Validate E.164
     const cleaned = phone.startsWith("+") ? phone : `+1${phone.replace(/\D/g, "")}`;
     if (!/^\+[1-9]\d{1,14}$/.test(cleaned)) {
       toast({ title: "Invalid phone number", description: "Use format: +15551234567", variant: "destructive" });
@@ -90,20 +89,15 @@ const Settings = () => {
     setPhone(cleaned);
     setIsSavingPhone(true);
     try {
-      // Save phone to profile (unverified)
-      const { error } = await supabase
-        .from("profiles")
-        .update({ phone: cleaned, phone_verified: false })
-        .eq("id", user!.id);
+      const { error, data } = await supabase.functions.invoke("send-phone-verification", {
+        body: { phone: cleaned },
+      });
       if (error) throw error;
-
-      // In production, this would call Twilio Verify API via an edge function
-      // For now, we'll mark as verified directly (simplified flow)
-      // TODO: Add proper Twilio Verify when TWILIO_VERIFY_SERVICE_SID is set
+      if (data?.error) throw new Error(data.error);
       setVerifyStep("sent");
       toast({ title: "Verification code sent", description: `We sent a code to ${cleaned}` });
     } catch (err: any) {
-      toast({ title: "Failed", description: err.message, variant: "destructive" });
+      toast({ title: "Failed to send code", description: err.message, variant: "destructive" });
     } finally {
       setIsSavingPhone(false);
     }
@@ -113,20 +107,18 @@ const Settings = () => {
     if (!verificationCode.trim()) return;
     setVerifyStep("verifying");
     try {
-      // Simplified: mark as verified
-      // In production, verify code via Twilio Verify API
-      const { error } = await supabase
-        .from("profiles")
-        .update({ phone_verified: true })
-        .eq("id", user!.id);
+      const { error, data } = await supabase.functions.invoke("verify-phone-code", {
+        body: { phone, code: verificationCode },
+      });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       queryClient.invalidateQueries({ queryKey: ["profile", user!.id] });
       setVerifyStep("idle");
       setVerificationCode("");
       toast({ title: "Phone verified!", description: "You'll receive SMS notifications for your events." });
     } catch (err: any) {
-      toast({ title: "Verification failed", description: err.message, variant: "destructive" });
+      toast({ title: "Incorrect code", description: err.message, variant: "destructive" });
       setVerifyStep("sent");
     }
   };
