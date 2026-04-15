@@ -23,3 +23,5 @@ project_id = "zenpfltyblaftzyklems"
     verify_jwt = false
   [functions.twilio-webhook]
     verify_jwt = false
+  [functions.unread-digest]
+    verify_jwt = false
