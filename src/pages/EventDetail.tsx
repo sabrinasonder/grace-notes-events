@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import {
   ArrowLeft,
+  Home,
   Calendar,
   MapPin,
   Users,
@@ -212,6 +213,12 @@ const EventDetail = () => {
           >
             <ArrowLeft className="h-4 w-4 text-foreground" strokeWidth={1.5} />
           </button>
+          <button
+            onClick={() => navigate("/")}
+            className="absolute top-12 right-5 flex h-9 w-9 items-center justify-center rounded-full bg-background/70 backdrop-blur-sm"
+          >
+            <Home className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+          </button>
         </div>
       ) : (
         <div className="relative h-36 w-full bg-secondary flex items-center justify-center">
@@ -224,6 +231,12 @@ const EventDetail = () => {
             className="absolute top-12 left-5 flex h-9 w-9 items-center justify-center rounded-full bg-background/70 backdrop-blur-sm"
           >
             <ArrowLeft className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+          </button>
+          <button
+            onClick={() => navigate("/")}
+            className="absolute top-12 right-5 flex h-9 w-9 items-center justify-center rounded-full bg-background/70 backdrop-blur-sm"
+          >
+            <Home className="h-4 w-4 text-foreground" strokeWidth={1.5} />
           </button>
         </div>
       )}

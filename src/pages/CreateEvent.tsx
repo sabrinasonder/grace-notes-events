@@ -3,7 +3,7 @@ import { useAuth } from "@/lib/auth";
 import { Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { ArrowLeft, CalendarIcon, ImagePlus } from "lucide-react";
+import { ArrowLeft, CalendarIcon, Home, ImagePlus } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -127,7 +127,12 @@ const CreateEvent = () => {
           <h1 className="flex-1 text-center font-display text-lg text-foreground">
             Create Event
           </h1>
-          <div className="w-12" />
+          <button
+            onClick={() => navigate("/")}
+            className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Home className="h-4 w-4" strokeWidth={1.5} />
+          </button>
         </div>
       </div>
 
