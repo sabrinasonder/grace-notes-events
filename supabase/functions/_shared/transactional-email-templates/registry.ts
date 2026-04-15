@@ -14,6 +14,7 @@ import { template as paymentReceipt } from './payment-receipt.tsx'
 import { template as hostUpdate } from './host-update.tsx'
 import { template as unreadMessagesDigest } from './unread-messages-digest.tsx'
 import { template as eventCancellation } from './event-cancellation.tsx'
+import { template as circleInvite } from './circle-invite.tsx'
 
 export const TEMPLATES: Record<string, TemplateEntry> = {
   'rsvp-confirmation': rsvpConfirmation,
@@ -21,4 +22,5 @@ export const TEMPLATES: Record<string, TemplateEntry> = {
   'host-update': hostUpdate,
   'unread-messages-digest': unreadMessagesDigest,
   'event-cancellation': eventCancellation,
+  'circle-invite': circleInvite,
 }
