@@ -580,13 +580,13 @@ const EventDetail = () => {
 
         {tab === "updates" && (
           <div className="space-y-4">
-            {/* Host composer */}
-            {isHost && (
+            {/* Composer — host or attending guests */}
+            {(isHost || myRsvp?.status === "going") && (
               <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
                 <textarea
                   value={updateBody}
                   onChange={(e) => setUpdateBody(e.target.value)}
-                  placeholder="Share an update with your guests…"
+                  placeholder={isHost ? "Share an update with your guests…" : "Share a comment…"}
                   rows={3}
                   className="w-full resize-none rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
@@ -638,11 +638,11 @@ const EventDetail = () => {
               </div>
             )}
 
-            {updates.length === 0 && !isHost ? (
+            {updates.length === 0 && !isHost && myRsvp?.status !== "going" ? (
               <p className="text-sm text-muted-foreground text-center py-6">
                 No updates yet.
               </p>
-            ) : updates.length === 0 && isHost ? null : (
+            ) : updates.length === 0 ? null : (
               updates.map((update: any) => {
                 const author = update.profiles;
                 return (
@@ -663,8 +663,11 @@ const EventDetail = () => {
                         </div>
                       )}
                       <span className="text-sm font-medium text-foreground">
-                        {author?.full_name || "Host"}
+                        {author?.full_name || "Member"}
                       </span>
+                      {update.author_id === event.host_id && (
+                        <span className="pill-tag bg-sage text-sage-foreground text-[10px] py-0.5 px-2">Host</span>
+                      )}
                       <span className="ml-auto text-xs text-muted-foreground">
                         {format(
                           new Date(update.created_at),
