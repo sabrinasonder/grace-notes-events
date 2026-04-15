@@ -124,6 +124,9 @@ const EventDetail = () => {
   }, [lightboxIndex, photos]);
 
   const myRsvp = rsvps.find((r: any) => r.user_id === user?.id);
+  const canChatEarly = event?.host_id === user?.id || myRsvp?.status === "going" || myRsvp?.status === "maybe";
+  const unreadChatCount = useUnreadChatCount(id, user?.id, !!canChatEarly);
+  const queryClient2 = useQueryClient();
 
   // Post an update (host only)
   const handlePostUpdate = async () => {
