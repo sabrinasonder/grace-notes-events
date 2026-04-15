@@ -159,17 +159,21 @@ const EventDetail = () => {
       queryClient.invalidateQueries({ queryKey: ["updates", id] });
       toast({ title: "Update posted" });
 
-      // Send host update email to all going/maybe RSVPs (fire-and-forget)
+      // Send host update email + SMS to all going/maybe RSVPs (fire-and-forget)
       if (insertedUpdate && event) {
         const attendeeRsvps = rsvps.filter((r: any) => r.status === "going" || r.status === "maybe");
+        const hostName = (event.profiles as any)?.full_name || "Your host";
+        const updateText = updateBody.trim();
+        const truncatedUpdate = updateText.length > 80 ? updateText.substring(0, 80) + "…" : updateText;
+
         for (const rsvp of attendeeRsvps) {
-          const profile = (rsvp as any).profiles;
-          // Get email from profiles table
           const { data: profileData } = await supabase
             .from("profiles")
-            .select("email")
+            .select("email, phone, phone_verified")
             .eq("id", rsvp.user_id)
-            .single();
+            .maybeSingle();
+
+          // Email
           if (profileData?.email) {
             supabase.functions.invoke("send-transactional-email", {
               body: {
@@ -178,10 +182,20 @@ const EventDetail = () => {
                 idempotencyKey: `host-update-${insertedUpdate.id}-${rsvp.user_id}`,
                 templateData: {
                   eventTitle: event.title,
-                  hostName: (event.profiles as any)?.full_name || "Your host",
-                  message: updateBody.trim(),
+                  hostName,
+                  message: updateText,
                   eventUrl: `${window.location.origin}/event/${id}`,
                 },
+              },
+            }).catch(() => {});
+          }
+
+          // SMS
+          if (profileData?.phone && profileData?.phone_verified) {
+            supabase.functions.invoke("send-sms", {
+              body: {
+                to: profileData.phone,
+                message: `${hostName} posted an update for ${event.title}: ${truncatedUpdate} ${window.location.origin}/event/${id}`,
               },
             }).catch(() => {});
           }
@@ -603,10 +617,28 @@ const EventDetail = () => {
                 </div>
                 {goingRsvps.filter((r: any) => !r.paid).length > 0 && (
                   <button
-                    onClick={() => {
+                    onClick={async () => {
+                      const unpaidGuests = goingRsvps.filter((r: any) => !r.paid);
+                      for (const rsvp of unpaidGuests) {
+                        const { data: profileData } = await supabase
+                          .from("profiles")
+                          .select("email, phone, phone_verified")
+                          .eq("id", rsvp.user_id)
+                          .maybeSingle();
+
+                        // SMS payment reminder
+                        if (profileData?.phone && profileData?.phone_verified) {
+                          supabase.functions.invoke("send-sms", {
+                            body: {
+                              to: profileData.phone,
+                              message: `Hey! Just a reminder to complete payment for ${event.title}: ${window.location.origin}/event/${id}`,
+                            },
+                          }).catch(() => {});
+                        }
+                      }
                       toast({
-                        title: "Reminders queued",
-                        description: `Payment reminders will be sent to ${goingRsvps.filter((r: any) => !r.paid).length} unpaid guest(s).`,
+                        title: "Reminders sent",
+                        description: `Payment reminders sent to ${unpaidGuests.length} unpaid guest(s).`,
                       });
                     }}
                     className="w-full flex items-center justify-center gap-2 rounded-full border border-border bg-background py-3 transition-colors hover:bg-card"
