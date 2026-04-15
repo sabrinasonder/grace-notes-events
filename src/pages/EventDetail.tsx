@@ -910,7 +910,7 @@ const EventDetail = () => {
       </div>
 
       {/* RSVP bar — free events (hosts included) */}
-      {isFree && (
+      {isFree && event.status !== 'cancelled' && (
         <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-lg z-20">
           <div className="mx-auto max-w-lg px-5 py-4">
             {isHost && (
