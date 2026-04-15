@@ -17,7 +17,9 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import type { Tables } from "@/integrations/supabase/types";
+import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
+import { getStripe, getStripeEnvironment } from "@/lib/stripe";
+import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 
 type TabKey = "about" | "guests" | "updates";
 
