@@ -3,7 +3,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
-import { format } from "date-fns";
+import { format, isToday, addDays, isBefore } from "date-fns";
 import { Plus, Calendar, MapPin, Users, Archive } from "lucide-react";
 
 type FilterTab = "all" | "hosting" | "attending";
@@ -20,6 +20,7 @@ const Index = () => {
         .from("events")
         .select("*, profiles!events_host_id_fkey(full_name, avatar_url), rsvps(id, status)")
         .gte("starts_at", new Date().toISOString())
+        .eq("status", "active")
         .order("starts_at", { ascending: true });
 
       if (filter === "hosting") {
@@ -30,7 +31,6 @@ const Index = () => {
       if (error) throw error;
 
       if (filter === "attending") {
-        // Filter client-side for events user has RSVP'd going/maybe
         const { data: myRsvps } = await supabase
           .from("rsvps")
           .select("event_id")
@@ -64,6 +64,106 @@ const Index = () => {
     { key: "hosting", label: "Hosting" },
     { key: "attending", label: "Attending" },
   ];
+
+  // Group events: This Week vs Coming Up
+  const now = new Date();
+  const endOfWeek = addDays(now, 7);
+  const thisWeekEvents = events.filter((e: any) => isBefore(new Date(e.starts_at), endOfWeek));
+  const comingUpEvents = events.filter((e: any) => !isBefore(new Date(e.starts_at), endOfWeek));
+
+  const renderEventCard = (event: any) => {
+    const goingCount = event.rsvps?.filter((r: any) => r.status === "going").length || 0;
+    const hostProfile = event.profiles;
+    const eventDate = new Date(event.starts_at);
+    const isEventToday = isToday(eventDate);
+
+    return (
+      <button
+        key={event.id}
+        onClick={() => navigate(`/event/${event.id}`)}
+        className="w-full text-left rounded-3xl border border-border bg-card overflow-hidden transition-transform active:scale-[0.98]"
+      >
+        {/* Cover image */}
+        {event.cover_image_url ? (
+          <div className="h-44 w-full overflow-hidden">
+            <img
+              src={event.cover_image_url}
+              alt={event.title}
+              className="h-full w-full object-cover"
+            />
+          </div>
+        ) : (
+          <div className="h-32 w-full bg-secondary flex items-center justify-center">
+            <Calendar
+              className="h-10 w-10 text-muted-foreground/40"
+              strokeWidth={1}
+            />
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="p-5 space-y-3">
+          {/* Date pill + Today pill + price */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="pill-tag bg-secondary text-foreground">
+                {format(eventDate, "MMM d · h:mm a")}
+              </span>
+              {isEventToday && (
+                <span className="pill-tag bg-accent text-accent-foreground">
+                  Today
+                </span>
+              )}
+            </div>
+            <span className="pill-tag border border-border text-muted-foreground">
+              {event.price_cents > 0
+                ? `$${(event.price_cents / 100).toFixed(0)}`
+                : "Free"}
+            </span>
+          </div>
+
+          <h3 className="font-display text-xl text-foreground leading-tight">
+            {event.title}
+          </h3>
+
+          {/* Meta row */}
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            {/* Host */}
+            <div className="flex items-center gap-1.5">
+              {hostProfile?.avatar_url ? (
+                <img
+                  src={hostProfile.avatar_url}
+                  alt=""
+                  className="h-5 w-5 rounded-full object-cover"
+                />
+              ) : (
+                <div className="h-5 w-5 rounded-full bg-accent/30 flex items-center justify-center text-[9px] font-semibold text-foreground">
+                  {(hostProfile?.full_name || "?")[0]}
+                </div>
+              )}
+              <span>{hostProfile?.full_name || "Host"}</span>
+            </div>
+
+            {/* Location */}
+            {event.location && (
+              <div className="flex items-center gap-1">
+                <MapPin className="h-3.5 w-3.5" strokeWidth={1.5} />
+                <span className="truncate max-w-[120px]">
+                  {event.location}
+                </span>
+              </div>
+            )}
+
+            {/* Going count */}
+            <div className="flex items-center gap-1 ml-auto">
+              <Users className="h-3.5 w-3.5" strokeWidth={1.5} />
+              <span>{goingCount} going</span>
+            </div>
+          </div>
+        </div>
+      </button>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background pb-28">
@@ -141,105 +241,38 @@ const Index = () => {
               </div>
               <div className="space-y-2">
                 <h2 className="font-display text-xl text-foreground">
-                  No upcoming events
+                  No events on the calendar yet
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  {filter === "all"
-                    ? "Be the first to create a gathering."
-                    : filter === "hosting"
-                    ? "You haven't created any events yet."
-                    : "You haven't RSVP'd to any events yet."}
+                  Be the first to host something.
                 </p>
               </div>
+              <button
+                onClick={() => navigate("/create")}
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 transition-all hover:opacity-90"
+              >
+                <Plus className="h-4 w-4 text-primary-foreground" strokeWidth={2} />
+                <span className="label-meta text-primary-foreground">Create Event</span>
+              </button>
             </div>
           ) : (
-            events.map((event: any) => {
-              const goingCount =
-                event.rsvps?.filter(
-                  (r: any) => r.status === "going"
-                ).length || 0;
-              const hostProfile = event.profiles;
+            <>
+              {/* This Week section */}
+              {thisWeekEvents.length > 0 && (
+                <div className="space-y-4">
+                  <h2 className="label-meta text-muted-foreground">This Week</h2>
+                  {thisWeekEvents.map(renderEventCard)}
+                </div>
+              )}
 
-              return (
-                <button
-                  key={event.id}
-                  onClick={() => navigate(`/event/${event.id}`)}
-                  className="w-full text-left rounded-3xl border border-border bg-card overflow-hidden transition-transform active:scale-[0.98]"
-                >
-                  {/* Cover image */}
-                  {event.cover_image_url ? (
-                    <div className="h-44 w-full overflow-hidden">
-                      <img
-                        src={event.cover_image_url}
-                        alt={event.title}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <div className="h-32 w-full bg-secondary flex items-center justify-center">
-                      <Calendar
-                        className="h-10 w-10 text-muted-foreground/40"
-                        strokeWidth={1}
-                      />
-                    </div>
-                  )}
-
-                  {/* Content */}
-                  <div className="p-5 space-y-3">
-                    {/* Date pill + price */}
-                    <div className="flex items-center justify-between">
-                      <span className="pill-tag bg-secondary text-foreground">
-                        {format(new Date(event.starts_at), "MMM d · h:mm a")}
-                      </span>
-                      <span className="pill-tag border border-border text-muted-foreground">
-                        {event.price_cents > 0
-                          ? `$${(event.price_cents / 100).toFixed(0)}`
-                          : "Free"}
-                      </span>
-                    </div>
-
-                    <h3 className="font-display text-xl text-foreground leading-tight">
-                      {event.title}
-                    </h3>
-
-                    {/* Meta row */}
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      {/* Host */}
-                      <div className="flex items-center gap-1.5">
-                        {hostProfile?.avatar_url ? (
-                          <img
-                            src={hostProfile.avatar_url}
-                            alt=""
-                            className="h-5 w-5 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="h-5 w-5 rounded-full bg-accent/30 flex items-center justify-center text-[9px] font-semibold text-foreground">
-                            {(hostProfile?.full_name || "?")[0]}
-                          </div>
-                        )}
-                        <span>{hostProfile?.full_name || "Host"}</span>
-                      </div>
-
-                      {/* Location */}
-                      {event.location && (
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-3.5 w-3.5" strokeWidth={1.5} />
-                          <span className="truncate max-w-[120px]">
-                            {event.location}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Going count */}
-                      <div className="flex items-center gap-1 ml-auto">
-                        <Users className="h-3.5 w-3.5" strokeWidth={1.5} />
-                        <span>{goingCount} going</span>
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              );
-            })
+              {/* Coming Up section */}
+              {comingUpEvents.length > 0 && (
+                <div className="space-y-4">
+                  <h2 className="label-meta text-muted-foreground">Coming Up</h2>
+                  {comingUpEvents.map(renderEventCard)}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
