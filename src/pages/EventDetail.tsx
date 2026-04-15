@@ -887,7 +887,14 @@ const EventDetail = () => {
         )}
 
         {tab === "chat" && (
-          canChat ? (
+          event.status === 'cancelled' ? (
+            <div className="text-center py-12 space-y-2">
+              <Ban className="h-6 w-6 text-muted-foreground mx-auto" strokeWidth={1.5} />
+              <p className="text-sm text-muted-foreground">
+                This event was cancelled. The chat is now closed.
+              </p>
+            </div>
+          ) : canChat ? (
             <EventChat
               eventId={id!}
               userId={user.id}
