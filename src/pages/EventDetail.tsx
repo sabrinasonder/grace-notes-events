@@ -255,6 +255,34 @@ const EventDetail = () => {
         .update({ status: "declined", decided_by: user!.id, decided_at: new Date().toISOString() })
         .eq("id", requestId);
       if (error) throw error;
+
+      // Send decline notification email
+      try {
+        const request = pendingRequests?.find((r: any) => r.id === requestId);
+        if (request?.user_id) {
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("email")
+            .eq("id", request.user_id)
+            .single();
+          if (profileData?.email) {
+            const hostName = user?.user_metadata?.full_name || "The host";
+            await supabase.functions.invoke("send-transactional-email", {
+              body: {
+                templateName: "join-request-declined",
+                recipientEmail: profileData.email,
+                idempotencyKey: `join-declined-${requestId}`,
+                templateData: {
+                  eventTitle: event?.title,
+                  hostName,
+                },
+              },
+            });
+          }
+        }
+      } catch (emailErr) {
+        console.error("Failed to send decline email:", emailErr);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["rsvp_requests", id] });
