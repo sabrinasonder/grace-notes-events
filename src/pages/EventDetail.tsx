@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, Navigate, useNavigate } from "react-router-dom";
+import { useFavorites } from "@/hooks/use-favorites";
 import { useAuth } from "@/lib/auth";
 import { EventChat, useUnreadChatCount } from "@/components/EventChat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
