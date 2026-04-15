@@ -514,11 +514,69 @@ const EventDetail = () => {
 
         {tab === "updates" && (
           <div className="space-y-4">
-            {updates.length === 0 ? (
+            {/* Host composer */}
+            {isHost && (
+              <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+                <textarea
+                  value={updateBody}
+                  onChange={(e) => setUpdateBody(e.target.value)}
+                  placeholder="Share an update with your guests…"
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                {updateImagePreview && (
+                  <div className="relative">
+                    <img src={updateImagePreview} alt="" className="rounded-xl w-full max-h-48 object-cover" />
+                    <button
+                      onClick={() => { setUpdateImage(null); setUpdateImagePreview(null); }}
+                      className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-background/80 backdrop-blur-sm"
+                    >
+                      <X className="h-3.5 w-3.5 text-foreground" strokeWidth={1.5} />
+                    </button>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => updateImageRef.current?.click()}
+                    className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <ImagePlus className="h-4 w-4" strokeWidth={1.5} />
+                    <span className="label-meta">Add photo</span>
+                  </button>
+                  <input
+                    ref={updateImageRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setUpdateImage(file);
+                        setUpdateImagePreview(URL.createObjectURL(file));
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handlePostUpdate}
+                    disabled={!updateBody.trim() || isPostingUpdate}
+                    className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 transition-all hover:opacity-90 disabled:opacity-50"
+                  >
+                    {isPostingUpdate ? (
+                      <Loader2 className="h-4 w-4 text-primary-foreground animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
+                    )}
+                    <span className="label-meta text-primary-foreground">Post</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {updates.length === 0 && !isHost ? (
               <p className="text-sm text-muted-foreground text-center py-6">
                 No updates yet.
               </p>
-            ) : (
+            ) : updates.length === 0 && isHost ? null : (
               updates.map((update: any) => {
                 const author = update.profiles;
                 return (
@@ -561,6 +619,60 @@ const EventDetail = () => {
                   </div>
                 );
               })
+            )}
+          </div>
+        )}
+
+        {tab === "photos" && (
+          <div className="space-y-4">
+            {/* Upload button */}
+            <button
+              onClick={() => photoInputRef.current?.click()}
+              disabled={photoUploading}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card py-6 transition-colors hover:bg-background"
+            >
+              {photoUploading ? (
+                <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+              ) : (
+                <Camera className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
+              )}
+              <span className="text-sm text-muted-foreground">
+                {photoUploading ? "Uploading…" : "Add a photo"}
+              </span>
+            </button>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handlePhotoUpload(file);
+              }}
+            />
+
+            {/* Photo grid */}
+            {photos.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No photos yet — be the first to share!
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {photos.map((photo: any) => (
+                  <div key={photo.id} className="relative rounded-xl overflow-hidden aspect-square">
+                    <img
+                      src={photo.image_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent p-2">
+                      <span className="text-[10px] text-white/80">
+                        {photo.profiles?.full_name || "Member"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
