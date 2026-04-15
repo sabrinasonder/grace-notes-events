@@ -330,11 +330,13 @@ const EventDetail = () => {
   const spotsLeft =
     event.capacity != null ? event.capacity - goingRsvps.length : null;
 
+  const canChat = isHost || myRsvp?.status === "going" || myRsvp?.status === "maybe";
+
   const tabs: { key: TabKey; label: string }[] = [
     { key: "about", label: "About" },
     { key: "guests", label: `Guests (${goingRsvps.length})` },
+    { key: "chat", label: "Chat" },
     { key: "updates", label: `Updates (${updates.length})` },
-    { key: "photos", label: `Photos (${photos.length})` },
   ];
 
   const rsvpButtons: {
