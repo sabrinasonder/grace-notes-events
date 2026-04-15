@@ -267,6 +267,7 @@ const EventDetail = () => {
     { key: "about", label: "About" },
     { key: "guests", label: `Guests (${goingRsvps.length})` },
     { key: "updates", label: `Updates (${updates.length})` },
+    { key: "photos", label: `Photos (${photos.length})` },
   ];
 
   const rsvpButtons: {
