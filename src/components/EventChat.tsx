@@ -10,6 +10,7 @@ interface EventChatProps {
   userId: string;
   isHost: boolean;
   eventTitle: string;
+  onUnreadCountChange?: (count: number) => void;
 }
 
 function relativeTime(dateStr: string): string {
@@ -27,7 +28,7 @@ function relativeTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProps) => {
+export const EventChat = ({ eventId, userId, isHost, eventTitle, onUnreadCountChange }: EventChatProps) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [body, setBody] = useState("");
@@ -36,12 +37,14 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProp
   const [isSending, setIsSending] = useState(false);
   const [replyTo, setReplyTo] = useState<any>(null);
   const [contextMenu, setContextMenu] = useState<string | null>(null);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const isNearBottom = useRef(true);
+  const typingTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   // Fetch messages
-  const { data: messages = [], isLoading, isError, error } = useQuery({
+  const { data: messages = [], isLoading } = useQuery({
     queryKey: ["chat_messages", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -72,6 +75,36 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProp
     },
   });
 
+  // Mark messages as read when viewing + report unread count as 0
+  useEffect(() => {
+    if (!messages.length) return;
+    const otherMessages = messages.filter((m: any) => m.sender_id !== userId);
+    if (!otherMessages.length) {
+      onUnreadCountChange?.(0);
+      return;
+    }
+
+    // Batch upsert read receipts for all messages from others
+    const markRead = async () => {
+      const messageIds = otherMessages.map((m: any) => m.id);
+      // Get already-read message IDs
+      const { data: alreadyRead } = await supabase
+        .from("message_reads")
+        .select("message_id")
+        .eq("user_id", userId)
+        .in("message_id", messageIds);
+      const readSet = new Set((alreadyRead || []).map((r: any) => r.message_id));
+      const unread = messageIds.filter((id: string) => !readSet.has(id));
+      if (unread.length > 0) {
+        await supabase.from("message_reads").insert(
+          unread.map((message_id: string) => ({ message_id, user_id: userId }))
+        );
+      }
+      onUnreadCountChange?.(0);
+    };
+    markRead();
+  }, [messages, userId, onUnreadCountChange]);
+
   // Realtime subscription
   useEffect(() => {
     const channel = supabase
@@ -87,6 +120,43 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProp
 
     return () => { supabase.removeChannel(channel); };
   }, [eventId, queryClient]);
+
+  // Typing indicator — broadcast via realtime presence
+  useEffect(() => {
+    const channel = supabase.channel(`typing-${eventId}`, {
+      config: { presence: { key: userId } },
+    });
+
+    channel
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState();
+        const names: string[] = [];
+        for (const [key, presences] of Object.entries(state)) {
+          if (key !== userId) {
+            const p = (presences as any[])[0];
+            if (p?.typing && Date.now() - (p?.ts || 0) < 10000) {
+              names.push(p.name || "Someone");
+            }
+          }
+        }
+        setTypingUsers(names);
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [eventId, userId]);
+
+  const broadcastTyping = useCallback(async () => {
+    const channel = supabase.channel(`typing-${eventId}`, {
+      config: { presence: { key: userId } },
+    });
+    // Track presence with typing flag
+    await channel.track({ typing: true, ts: Date.now(), name: "" });
+    if (typingTimeout.current) clearTimeout(typingTimeout.current);
+    typingTimeout.current = setTimeout(async () => {
+      await channel.untrack();
+    }, 4000);
+  }, [eventId, userId]);
 
   // Auto-scroll
   const scrollToBottom = useCallback(() => {
@@ -144,11 +214,7 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProp
         ? {
             ...insertedMessage,
             replied: replyTo
-              ? {
-                  id: replyTo.id,
-                  body: replyTo.body,
-                  profiles: replyTo.profiles ?? null,
-                }
+              ? { id: replyTo.id, body: replyTo.body, profiles: replyTo.profiles ?? null }
               : null,
           }
         : null;
@@ -241,7 +307,7 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProp
 
             return (
               <div key={msg.id} className={cn("relative group", isOwn ? "flex flex-col items-end" : "flex flex-col items-start")}>
-                {/* Sender name — only show if different author or first message */}
+                {/* Sender name */}
                 {!isOwn && !sameAuthorAsPrev && (
                   <span
                     className="mt-3 mb-0.5 px-3"
@@ -284,10 +350,7 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProp
                     e.preventDefault();
                     setContextMenu(msg.id);
                   }}
-                  onClick={(e) => {
-                    // Long-press simulation for mobile — use context menu
-                    e.stopPropagation();
-                  }}
+                  onClick={(e) => e.stopPropagation()}
                 >
                   {msg.image_url && (
                     <img src={msg.image_url} alt="" className="rounded-xl max-h-48 w-full object-cover mb-1.5" />
@@ -342,6 +405,24 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProp
         )}
       </div>
 
+      {/* Typing indicator */}
+      {typingUsers.length > 0 && (
+        <div className="px-4 py-1.5">
+          <p style={{
+            fontFamily: "var(--font-body)",
+            fontSize: "11px",
+            color: "hsl(var(--muted-foreground))",
+            fontStyle: "italic",
+          }}>
+            {typingUsers.length === 1
+              ? `${typingUsers[0]} is typing…`
+              : typingUsers.length === 2
+              ? `${typingUsers[0]} and ${typingUsers[1]} are typing…`
+              : "Several people are typing…"}
+          </p>
+        </div>
+      )}
+
       {/* Reply banner */}
       {replyTo && (
         <div className="flex items-center gap-2 border-t border-border bg-card px-4 py-2">
@@ -394,7 +475,10 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProp
         />
         <textarea
           value={body}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={(e) => {
+            setBody(e.target.value);
+            broadcastTyping();
+          }}
           onKeyDown={handleKeyDown}
           placeholder="Message…"
           rows={1}
@@ -416,3 +500,48 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProp
     </div>
   );
 };
+
+// Hook for getting unread count without rendering chat
+export function useUnreadChatCount(eventId: string | undefined, userId: string | undefined, canChat: boolean) {
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ["chat_unread", eventId, userId],
+    queryFn: async () => {
+      if (!eventId || !userId) return 0;
+      // Get total messages from others
+      const { count: totalCount, error: totalErr } = await supabase
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .eq("event_id", eventId)
+        .neq("sender_id", userId)
+        .is("deleted_at", null);
+      if (totalErr || !totalCount) return 0;
+
+      // Get read count
+      const { data: readMessages } = await supabase
+        .from("message_reads")
+        .select("message_id")
+        .eq("user_id", userId);
+      
+      if (!readMessages) return totalCount;
+
+      // We need to check which of the read messages belong to this event
+      // Get all message IDs for this event from others
+      const { data: eventMessages } = await supabase
+        .from("messages")
+        .select("id")
+        .eq("event_id", eventId)
+        .neq("sender_id", userId)
+        .is("deleted_at", null);
+
+      if (!eventMessages) return 0;
+
+      const readSet = new Set(readMessages.map((r: any) => r.message_id));
+      const unread = eventMessages.filter((m: any) => !readSet.has(m.id));
+      return unread.length;
+    },
+    enabled: !!eventId && !!userId && canChat,
+    refetchInterval: 30000, // refresh every 30s
+  });
+
+  return unreadCount;
+}
