@@ -1181,7 +1181,7 @@ const EventDetail = () => {
       {/* Request-to-join flow */}
       {needsRequestToJoin && event.status !== "cancelled" && (
         <div className="fixed bottom-0 left-0 right-0 z-20">
-          <div className="h-16 pointer-events-none" style={{ background: "linear-gradient(to top, hsl(37 60% 96%) 70%, transparent)" }} />
+          <div className="h-6 pointer-events-none" style={{ background: "linear-gradient(to top, hsl(37 60% 96%) 70%, transparent)" }} />
           <div className="bg-background px-6 pb-6 pt-2">
             <div className="mx-auto max-w-lg">
               {hasPendingRequest ? (
@@ -1225,7 +1225,7 @@ const EventDetail = () => {
       {/* Free events RSVP bar */}
       {isFree && event.status !== "cancelled" && !needsRequestToJoin && (
         <div className="fixed bottom-0 left-0 right-0 z-20">
-          <div className="h-16 pointer-events-none" style={{ background: "linear-gradient(to top, hsl(37 60% 96%) 70%, transparent)" }} />
+          <div className="h-6 pointer-events-none" style={{ background: "linear-gradient(to top, hsl(37 60% 96%) 70%, transparent)" }} />
           <div className="bg-background px-6 pb-6 pt-2">
             <div className="mx-auto max-w-lg">
               {isHost ? (
@@ -1297,7 +1297,7 @@ const EventDetail = () => {
             </div>
           )}
           <div className="fixed bottom-0 left-0 right-0 z-20">
-            <div className="h-16 pointer-events-none" style={{ background: "linear-gradient(to top, hsl(37 60% 96%) 70%, transparent)" }} />
+            <div className="h-6 pointer-events-none" style={{ background: "linear-gradient(to top, hsl(37 60% 96%) 70%, transparent)" }} />
             <div className="bg-background px-6 pb-6 pt-2">
               <div className="mx-auto max-w-lg">
                 {isHost ? (
