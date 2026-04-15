@@ -47,6 +47,7 @@ const EventDetail = () => {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState<TabKey>("about");
   const [showCheckout, setShowCheckout] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   // Fetch event
   const { data: event, isLoading } = useQuery({
