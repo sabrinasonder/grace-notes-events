@@ -8,6 +8,7 @@ import {
   Container,
   Head,
   Heading,
+  Hr,
   Html,
   Link,
   Preview,
@@ -29,29 +30,22 @@ export const SignupEmail = ({
 }: SignupEmailProps) => (
   <Html lang="en" dir="ltr">
     <Head />
-    <Preview>Confirm your email for {siteName}</Preview>
+    <Preview>Welcome to Sonder Circle — confirm your email</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Heading style={h1}>Confirm your email</Heading>
+        <Text style={brand}>Sonder Circle</Text>
+        <Hr style={divider} />
+        <Heading style={h1}>Welcome aboard</Heading>
         <Text style={text}>
-          Thanks for signing up for{' '}
-          <Link href={siteUrl} style={link}>
-            <strong>{siteName}</strong>
-          </Link>
-          !
-        </Text>
-        <Text style={text}>
-          Please confirm your email address (
-          <Link href={`mailto:${recipient}`} style={link}>
-            {recipient}
-          </Link>
-          ) by clicking the button below:
+          We're so glad you're here. Confirm your email address (
+          <Link href={`mailto:${recipient}`} style={link}>{recipient}</Link>
+          ) to join the circle.
         </Text>
         <Button style={button} href={confirmationUrl}>
-          Verify Email
+          Confirm Email
         </Button>
         <Text style={footer}>
-          If you didn't create an account, you can safely ignore this email.
+          If you didn't sign up for Sonder Circle, you can safely ignore this email.
         </Text>
       </Container>
     </Body>
@@ -60,27 +54,39 @@ export const SignupEmail = ({
 
 export default SignupEmail
 
-const main = { backgroundColor: '#ffffff', fontFamily: 'Arial, sans-serif' }
-const container = { padding: '20px 25px' }
+const main = { backgroundColor: '#ffffff', fontFamily: "'Manrope', 'Helvetica Neue', Arial, sans-serif" }
+const container = { padding: '40px 32px', maxWidth: '480px', margin: '0 auto' }
+const brand = {
+  fontFamily: "'Fraunces', Georgia, serif",
+  fontSize: '20px',
+  fontWeight: 400 as const,
+  color: '#1F1612',
+  margin: '0 0 16px',
+  textAlign: 'center' as const,
+}
+const divider = { borderColor: '#E8DDD4', margin: '0 0 32px' }
 const h1 = {
-  fontSize: '22px',
-  fontWeight: 'bold' as const,
-  color: '#000000',
-  margin: '0 0 20px',
+  fontFamily: "'Fraunces', Georgia, serif",
+  fontSize: '24px',
+  fontWeight: 400 as const,
+  color: '#1F1612',
+  margin: '0 0 16px',
 }
 const text = {
   fontSize: '14px',
-  color: '#55575d',
-  lineHeight: '1.5',
-  margin: '0 0 25px',
+  color: '#8C7A6B',
+  lineHeight: '1.6',
+  margin: '0 0 28px',
 }
-const link = { color: 'inherit', textDecoration: 'underline' }
+const link = { color: '#1F1612', textDecoration: 'underline' }
 const button = {
-  backgroundColor: '#000000',
-  color: '#ffffff',
+  backgroundColor: '#3A2A20',
+  color: '#FAF6EE',
   fontSize: '14px',
-  borderRadius: '8px',
-  padding: '12px 20px',
+  fontWeight: 500 as const,
+  borderRadius: '24px',
+  padding: '14px 28px',
   textDecoration: 'none',
+  display: 'inline-block' as const,
 }
-const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0' }
+const footer = { fontSize: '12px', color: '#B0A396', margin: '32px 0 0', lineHeight: '1.5' }
