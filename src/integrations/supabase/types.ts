@@ -101,6 +101,41 @@ export type Database = {
         }
         Relationships: []
       }
+      event_invites: {
+        Row: {
+          created_at: string
+          event_id: string
+          id: string
+          invited_by: string
+          invited_user_id: string
+          status: Database["public"]["Enums"]["event_invite_status"]
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          id?: string
+          invited_by: string
+          invited_user_id: string
+          status?: Database["public"]["Enums"]["event_invite_status"]
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          id?: string
+          invited_by?: string
+          invited_user_id?: string
+          status?: Database["public"]["Enums"]["event_invite_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_invites_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_photos: {
         Row: {
           created_at: string
@@ -164,6 +199,7 @@ export type Database = {
           id: string
           location: string | null
           price_cents: number
+          privacy: Database["public"]["Enums"]["event_privacy"]
           starts_at: string
           status: Database["public"]["Enums"]["event_status"]
           title: string
@@ -179,6 +215,7 @@ export type Database = {
           id?: string
           location?: string | null
           price_cents?: number
+          privacy?: Database["public"]["Enums"]["event_privacy"]
           starts_at: string
           status?: Database["public"]["Enums"]["event_status"]
           title: string
@@ -194,6 +231,7 @@ export type Database = {
           id?: string
           location?: string | null
           price_cents?: number
+          privacy?: Database["public"]["Enums"]["event_privacy"]
           starts_at?: string
           status?: Database["public"]["Enums"]["event_status"]
           title?: string
@@ -208,6 +246,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      invites: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          invitee_email: string
+          invitee_name: string
+          inviter_id: string
+          personal_note: string | null
+          status: Database["public"]["Enums"]["invite_status"]
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          invitee_email: string
+          invitee_name: string
+          inviter_id: string
+          personal_note?: string | null
+          status?: Database["public"]["Enums"]["invite_status"]
+          token?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          invitee_email?: string
+          invitee_name?: string
+          inviter_id?: string
+          personal_note?: string | null
+          status?: Database["public"]["Enums"]["invite_status"]
+          token?: string
+        }
+        Relationships: []
       }
       message_reads: {
         Row: {
@@ -425,6 +502,47 @@ export type Database = {
         }
         Relationships: []
       }
+      rsvp_requests: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          event_id: string
+          id: string
+          message: string | null
+          status: Database["public"]["Enums"]["rsvp_request_status"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          event_id: string
+          id?: string
+          message?: string | null
+          status?: Database["public"]["Enums"]["rsvp_request_status"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          event_id?: string
+          id?: string
+          message?: string | null
+          status?: Database["public"]["Enums"]["rsvp_request_status"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rsvp_requests_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rsvps: {
         Row: {
           created_at: string
@@ -569,6 +687,27 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -579,6 +718,14 @@ export type Database = {
         Args: { _event_id: string; _user_id: string }
         Returns: boolean
       }
+      can_view_event: {
+        Args: { _event_id: string; _user_id: string }
+        Returns: boolean
+      }
+      can_view_event_location: {
+        Args: { _event_id: string; _user_id: string }
+        Returns: boolean
+      }
       delete_email: {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
@@ -586,6 +733,13 @@ export type Database = {
       enqueue_email: {
         Args: { payload: Json; queue_name: string }
         Returns: number
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
       }
       move_to_dlq: {
         Args: {
@@ -606,7 +760,12 @@ export type Database = {
       }
     }
     Enums: {
+      app_role: "member" | "admin"
+      event_invite_status: "pending" | "accepted" | "declined"
+      event_privacy: "invite_only" | "request_to_join" | "open"
       event_status: "active" | "cancelled" | "completed"
+      invite_status: "pending" | "accepted" | "revoked" | "expired"
+      rsvp_request_status: "pending" | "approved" | "declined"
       rsvp_status: "going" | "maybe" | "declined"
     }
     CompositeTypes: {
@@ -735,7 +894,12 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["member", "admin"],
+      event_invite_status: ["pending", "accepted", "declined"],
+      event_privacy: ["invite_only", "request_to_join", "open"],
       event_status: ["active", "cancelled", "completed"],
+      invite_status: ["pending", "accepted", "revoked", "expired"],
+      rsvp_request_status: ["pending", "approved", "declined"],
       rsvp_status: ["going", "maybe", "declined"],
     },
   },
