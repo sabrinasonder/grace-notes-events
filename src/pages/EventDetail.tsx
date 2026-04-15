@@ -1180,9 +1180,8 @@ const EventDetail = () => {
 
       {/* Request-to-join flow */}
       {needsRequestToJoin && event.status !== "cancelled" && (
-        <div className="fixed bottom-0 left-0 right-0 z-20">
-          <div className="h-6 pointer-events-none" style={{ background: "linear-gradient(to top, hsl(37 60% 96%) 70%, transparent)" }} />
-          <div className="bg-background px-6 pb-4 pt-1">
+        <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-cream bg-background">
+          <div className="px-6 py-3">
             <div className="mx-auto max-w-lg">
               {hasPendingRequest ? (
                 <div className="flex items-center justify-center gap-2 rounded-full border border-blush/30 bg-blush/10 py-3.5">
@@ -1224,17 +1223,15 @@ const EventDetail = () => {
 
       {/* Free events RSVP bar */}
       {isFree && event.status !== "cancelled" && !needsRequestToJoin && (
-        <div className="fixed bottom-0 left-0 right-0 z-20">
-          <div className="h-6 pointer-events-none" style={{ background: "linear-gradient(to top, hsl(37 60% 96%) 70%, transparent)" }} />
-          <div className="bg-background px-6 pb-4 pt-1">
+        <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-cream bg-background">
+          <div className="px-6 py-3">
             <div className="mx-auto max-w-lg">
               {isHost ? (
-                /* Host: Manage Event */
-                <div className="text-center space-y-2">
-                  <p className="font-serif italic text-[13px] text-taupe">You're hosting this event</p>
+                <div className="text-center space-y-1">
+                  <p className="font-serif italic text-[12px] text-taupe">You're hosting this event</p>
                   <button
                     onClick={() => navigate(`/create?edit=${id}`)}
-                    className="w-full rounded-full bg-cocoa py-3.5 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90"
+                    className="w-full rounded-full bg-cocoa py-2.5 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90"
                   >
                     Manage Event
                   </button>
@@ -1296,16 +1293,15 @@ const EventDetail = () => {
               </div>
             </div>
           )}
-          <div className="fixed bottom-0 left-0 right-0 z-20">
-            <div className="h-6 pointer-events-none" style={{ background: "linear-gradient(to top, hsl(37 60% 96%) 70%, transparent)" }} />
-            <div className="bg-background px-6 pb-4 pt-1">
+          <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-cream bg-background">
+            <div className="px-6 py-3">
               <div className="mx-auto max-w-lg">
                 {isHost ? (
-                  <div className="text-center space-y-2">
-                    <p className="font-serif italic text-[13px] text-taupe">You're hosting this event</p>
+                  <div className="text-center space-y-1">
+                    <p className="font-serif italic text-[12px] text-taupe">You're hosting this event</p>
                     <button
                       onClick={() => navigate(`/create?edit=${id}`)}
-                      className="w-full rounded-full bg-cocoa py-3.5 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90"
+                      className="w-full rounded-full bg-cocoa py-2.5 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90"
                     >
                       Manage Event
                     </button>
