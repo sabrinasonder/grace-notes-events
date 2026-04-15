@@ -1191,7 +1191,7 @@ const EventDetail = () => {
 
       {/* Request-to-join flow */}
       {needsRequestToJoin && event.status !== "cancelled" && (
-        <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-cream bg-background">
+        <div className="fixed bottom-[70px] left-0 right-0 z-20 border-t border-cream bg-background">
           <div className="px-6 py-3">
             <div className="mx-auto max-w-lg">
               {hasPendingRequest ? (
@@ -1234,7 +1234,7 @@ const EventDetail = () => {
 
       {/* Free events RSVP bar */}
       {isFree && event.status !== "cancelled" && !needsRequestToJoin && (
-        <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-cream bg-background">
+        <div className="fixed bottom-[70px] left-0 right-0 z-20 border-t border-cream bg-background">
           <div className="px-6 py-3">
             <div className="mx-auto max-w-lg">
               {isHost ? (
@@ -1344,7 +1344,7 @@ const EventDetail = () => {
               </div>
             </div>
           )}
-          <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-cream bg-background">
+          <div className="fixed bottom-[70px] left-0 right-0 z-20 border-t border-cream bg-background">
             <div className="px-6 py-3">
               <div className="mx-auto max-w-lg">
                 {isHost ? (
