@@ -984,7 +984,101 @@ const EventDetail = () => {
               </div>
             )}
 
-            {/* Host dashboard stats — only for host on paid events */}
+            {/* Host: Invite Members (for invite_only events) */}
+            {isHost && event.privacy === "invite_only" && event.status === "active" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="label-meta text-muted-foreground">Invite Members</h3>
+                  <button
+                    onClick={() => setShowInviteMembers(!showInviteMembers)}
+                    className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 transition-colors hover:bg-background"
+                  >
+                    <UserPlus className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.5} />
+                    <span className="label-meta text-muted-foreground">
+                      {showInviteMembers ? "Close" : "Add"}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Invited list */}
+                {eventInvites.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {eventInvites.map((inv: any) => {
+                      const member = allMembers.find((m: any) => m.id === inv.invited_user_id);
+                      return (
+                        <span key={inv.id} className="pill-tag border border-border text-xs text-muted-foreground">
+                          {member?.full_name || "Member"} · {inv.status}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {showInviteMembers && (
+                  <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                      <input
+                        type="text"
+                        placeholder="Search members…"
+                        value={inviteSearch}
+                        onChange={(e) => setInviteSearch(e.target.value)}
+                        className="w-full rounded-full border border-border bg-background py-2.5 pl-9 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                    <div className="max-h-60 overflow-y-auto space-y-1">
+                      {allMembers
+                        .filter((m: any) => {
+                          if (m.id === user?.id) return false;
+                          const alreadyInvited = eventInvites.some((inv: any) => inv.invited_user_id === m.id);
+                          if (alreadyInvited) return false;
+                          const alreadyRsvpd = rsvps.some((r: any) => r.user_id === m.id);
+                          if (alreadyRsvpd) return false;
+                          if (!inviteSearch.trim()) return true;
+                          return (m.full_name || "").toLowerCase().includes(inviteSearch.toLowerCase());
+                        })
+                        .map((m: any) => (
+                          <div
+                            key={m.id}
+                            className="flex items-center gap-3 rounded-xl p-2.5 hover:bg-background transition-colors"
+                          >
+                            {m.avatar_url ? (
+                              <img src={m.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover" />
+                            ) : (
+                              <div className="h-8 w-8 rounded-full bg-accent/30 flex items-center justify-center text-sm font-semibold text-foreground">
+                                {(m.full_name || "?")[0]}
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-foreground truncate">{m.full_name || "Member"}</p>
+                            </div>
+                            <button
+                              onClick={() => inviteMemberMutation.mutate(m.id)}
+                              disabled={inviteMemberMutation.isPending}
+                              className="rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-all"
+                            >
+                              Invite
+                            </button>
+                          </div>
+                        ))}
+                      {allMembers.filter((m: any) => {
+                        if (m.id === user?.id) return false;
+                        const alreadyInvited = eventInvites.some((inv: any) => inv.invited_user_id === m.id);
+                        if (alreadyInvited) return false;
+                        const alreadyRsvpd = rsvps.some((r: any) => r.user_id === m.id);
+                        if (alreadyRsvpd) return false;
+                        if (!inviteSearch.trim()) return true;
+                        return (m.full_name || "").toLowerCase().includes(inviteSearch.toLowerCase());
+                      }).length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          {inviteSearch ? "No matching members found" : "All members have been invited"}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
             {isHost && !isFree && (
               <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
                 <h3 className="label-meta text-muted-foreground">Payment Overview</h3>
