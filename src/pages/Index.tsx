@@ -67,8 +67,37 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background pb-28">
+      {/* Account bar — top */}
+      <div className="sticky top-0 left-0 right-0 border-b border-border bg-background/80 backdrop-blur-lg z-20">
+        <div className="mx-auto flex max-w-lg items-center justify-between px-5 py-3">
+          <p className="text-xs text-muted-foreground truncate">
+            {user.email}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => navigate("/archive")}
+              className="pill-tag border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Archive
+            </button>
+            <button
+              onClick={() => navigate("/settings")}
+              className="pill-tag border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Settings
+            </button>
+            <button
+              onClick={signOut}
+              className="pill-tag border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Header */}
-      <div className="px-5 pt-12 pb-6">
+      <div className="px-5 pt-8 pb-6">
         <div className="mx-auto max-w-lg space-y-1">
           <p className="label-meta text-muted-foreground">Welcome back</p>
           <h1 className="font-display text-3xl text-foreground">
@@ -231,34 +260,6 @@ const Index = () => {
         </button>
       </div>
 
-      {/* Account bar */}
-      <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-lg z-20">
-        <div className="mx-auto flex max-w-lg items-center justify-between px-5 py-3">
-          <p className="text-xs text-muted-foreground truncate">
-            {user.email}
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => navigate("/archive")}
-              className="pill-tag border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Archive
-            </button>
-            <button
-              onClick={() => navigate("/settings")}
-              className="pill-tag border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Settings
-            </button>
-            <button
-              onClick={signOut}
-              className="pill-tag border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
