@@ -946,7 +946,7 @@ const EventDetail = () => {
       )}
 
       {/* Paid events — embedded checkout or paid confirmation (hosts included) */}
-      {!isFree && (
+      {!isFree && event.status !== 'cancelled' && (
         <>
           {showCheckout && !myRsvp?.paid && (
             <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto">
