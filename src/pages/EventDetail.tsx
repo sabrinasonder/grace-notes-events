@@ -42,6 +42,7 @@ import { cn } from "@/lib/utils";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { getStripe, getStripeEnvironment } from "@/lib/stripe";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type TabKey = "about" | "guests" | "chat" | "updates";
 
