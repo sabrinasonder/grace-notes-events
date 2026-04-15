@@ -112,13 +112,32 @@ const Settings = () => {
   const togglePref = async (field: string, value: boolean) => {
     if (!user) return;
     try {
-      const { error } = await supabase
+      // Check if prefs row exists
+      const { data: existing } = await supabase
         .from("notification_preferences")
-        .upsert({
-          user_id: user.id,
-          [field]: value,
-        }, { onConflict: "user_id" });
-      if (error) throw error;
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (existing) {
+        const { error } = await supabase
+          .from("notification_preferences")
+          .update({ [field]: value } as any)
+          .eq("user_id", user.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("notification_preferences")
+          .insert({
+            user_id: user.id,
+            email_reminders: true,
+            sms_reminders: true,
+            host_announcements_email: true,
+            host_announcements_sms: true,
+            [field]: value,
+          });
+        if (error) throw error;
+      }
       queryClient.invalidateQueries({ queryKey: ["notification_prefs", user.id] });
     } catch (err: any) {
       toast({ title: "Failed to update", description: err.message, variant: "destructive" });
