@@ -54,6 +54,9 @@ const EventDetail = () => {
   const [tab, setTab] = useState<TabKey>("about");
   const [showCheckout, setShowCheckout] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [showHostMenu, setShowHostMenu] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
 
   const { data: event, isLoading } = useQuery({
