@@ -1247,29 +1247,69 @@ const EventDetail = () => {
                     Manage Event
                   </button>
                 </div>
-              ) : myRsvp?.status === "going" ? (
-                /* Guest confirmed */
-                <div className="flex items-center justify-center gap-2 rounded-full bg-sage/20 py-3.5">
-                  <Check className="h-4 w-4 text-sage" strokeWidth={2} />
-                  <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-sage">You're confirmed</span>
+              ) : myRsvp ? (
+                /* Guest has RSVP'd — show current status with ability to change */
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => rsvpMutation.mutate("going")}
+                      disabled={rsvpMutation.isPending}
+                      className={cn(
+                        "flex-1 rounded-full py-3 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] transition-all disabled:opacity-50",
+                        myRsvp.status === "going"
+                          ? "bg-sage/20 text-sage border border-sage/40"
+                          : "border border-cream bg-paper text-taupe hover:bg-cream"
+                      )}
+                    >
+                      {myRsvp.status === "going" ? "✓ Going" : "Going"}
+                    </button>
+                    <button
+                      onClick={() => rsvpMutation.mutate("maybe")}
+                      disabled={rsvpMutation.isPending}
+                      className={cn(
+                        "flex-1 rounded-full py-3 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] transition-all disabled:opacity-50",
+                        myRsvp.status === "maybe"
+                          ? "bg-blush/20 text-blush border border-blush/40"
+                          : "border border-cream bg-paper text-taupe hover:bg-cream"
+                      )}
+                    >
+                      {myRsvp.status === "maybe" ? "✓ Maybe" : "Maybe"}
+                    </button>
+                    <button
+                      onClick={() => rsvpMutation.mutate("declined")}
+                      disabled={rsvpMutation.isPending}
+                      className={cn(
+                        "flex-1 rounded-full py-3 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] transition-all disabled:opacity-50",
+                        myRsvp.status === "declined"
+                          ? "bg-cocoa/10 text-cocoa border border-cocoa/30"
+                          : "border border-cream bg-paper text-taupe hover:bg-cream"
+                      )}
+                    >
+                      {myRsvp.status === "declined" ? "✓ Can't go" : "Can't go"}
+                    </button>
+                  </div>
                 </div>
               ) : (
-                /* Guest not yet RSVP'd */
-                <div className="flex gap-3">
+                /* Guest not yet RSVP'd — 3 options */
+                <div className="flex gap-2">
                   <button
                     onClick={() => rsvpMutation.mutate("declined")}
                     disabled={rsvpMutation.isPending}
-                    className={cn(
-                      "w-[38%] rounded-full border border-cream bg-paper py-3.5 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] transition-all hover:bg-cream disabled:opacity-50",
-                      myRsvp?.status === "declined" ? "text-cocoa border-cocoa" : "text-taupe"
-                    )}
+                    className="rounded-full border border-cream bg-paper py-3 px-4 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-taupe transition-all hover:bg-cream disabled:opacity-50"
                   >
-                    Can't make it
+                    Can't go
+                  </button>
+                  <button
+                    onClick={() => rsvpMutation.mutate("maybe")}
+                    disabled={rsvpMutation.isPending}
+                    className="rounded-full border border-cream bg-paper py-3 px-4 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-taupe transition-all hover:bg-cream disabled:opacity-50"
+                  >
+                    Maybe
                   </button>
                   <button
                     onClick={() => rsvpMutation.mutate("going")}
                     disabled={rsvpMutation.isPending}
-                    className="flex-1 rounded-full bg-cocoa py-3.5 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90 disabled:opacity-50"
+                    className="flex-1 rounded-full bg-cocoa py-3 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90 disabled:opacity-50"
                   >
                     I'm going
                   </button>
