@@ -31,6 +31,7 @@ const EventDetail = () => {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>("about");
   const [checkingOut, setCheckingOut] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
 
   // Fetch event
   const { data: event, isLoading } = useQuery({
@@ -120,30 +121,17 @@ const EventDetail = () => {
     },
   });
 
-  const handleCheckout = async () => {
-    setCheckingOut(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: {
-          event_id: id,
-          success_url: window.location.href,
-          cancel_url: window.location.href,
-        },
-      });
-      if (error) throw error;
-      if (data?.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error("No checkout URL returned");
-      }
-    } catch (err: any) {
-      toast({
-        title: "Payment failed",
-        description: err.message,
-        variant: "destructive",
-      });
-      setCheckingOut(false);
-    }
+  const fetchClientSecret = async (): Promise<string> => {
+    const { data, error } = await supabase.functions.invoke("create-checkout", {
+      body: {
+        event_id: id,
+        return_url: `${window.location.origin}/event/${id}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+        environment: getStripeEnvironment(),
+      },
+    });
+    if (error) throw error;
+    if (!data?.clientSecret) throw new Error("Failed to create checkout session");
+    return data.clientSecret;
   };
 
   if (authLoading || isLoading) {
