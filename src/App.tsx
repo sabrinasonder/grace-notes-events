@@ -11,6 +11,8 @@ import EventDetail from "./pages/EventDetail.tsx";
 import Unsubscribe from "./pages/Unsubscribe.tsx";
 import Settings from "./pages/Settings.tsx";
 import Archive from "./pages/Archive.tsx";
+import InviteFriend from "./pages/InviteFriend.tsx";
+import AcceptInvite from "./pages/AcceptInvite.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -30,6 +32,8 @@ const App = () => (
             <Route path="/unsubscribe" element={<Unsubscribe />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/archive" element={<Archive />} />
+            <Route path="/invite" element={<InviteFriend />} />
+            <Route path="/accept-invite" element={<AcceptInvite />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
