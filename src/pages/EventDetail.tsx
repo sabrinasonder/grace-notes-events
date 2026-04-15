@@ -335,10 +335,11 @@ const EventDetail = () => {
 
   const canChat = isHost || myRsvp?.status === "going" || myRsvp?.status === "maybe";
 
-  const tabs: { key: TabKey; label: string }[] = [
+  const chatLabel = unreadChatCount > 0 ? `Chat (${unreadChatCount})` : "Chat";
+  const tabs: { key: TabKey; label: string; hasUnread?: boolean }[] = [
     { key: "about", label: "About" },
     { key: "guests", label: `Guests (${goingRsvps.length})` },
-    ...(canChat ? [{ key: "chat" as TabKey, label: "Chat" }] : []),
+    ...(canChat ? [{ key: "chat" as TabKey, label: chatLabel, hasUnread: unreadChatCount > 0 }] : []),
     { key: "updates", label: `Updates (${updates.length})` },
   ];
 
