@@ -28,6 +28,7 @@ const EventDetail = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>("about");
+  const [checkingOut, setCheckingOut] = useState(false);
 
   // Fetch event
   const { data: event, isLoading } = useQuery({
