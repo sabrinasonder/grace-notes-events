@@ -15,6 +15,8 @@ const Settings = () => {
   const queryClient = useQueryClient();
 
   const [phone, setPhone] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
   const [verificationCode, setVerificationCode] = useState("");
   const [verifyStep, setVerifyStep] = useState<"idle" | "sent" | "verifying">("idle");
   const [isSavingPhone, setIsSavingPhone] = useState(false);
@@ -56,7 +58,26 @@ const Settings = () => {
 
   useEffect(() => {
     if (profile?.phone) setPhone(profile.phone);
+    if (profile?.full_name) setFullName(profile.full_name);
   }, [profile]);
+
+  const handleSaveName = async () => {
+    if (!fullName.trim() || !user) return;
+    setIsSavingName(true);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ full_name: fullName.trim() })
+        .eq("id", user.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["profile", user.id] });
+      toast({ title: "Name updated!" });
+    } catch (err: any) {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsSavingName(false);
+    }
+  };
 
   const handleSendVerification = async () => {
     if (!phone.trim()) return;
