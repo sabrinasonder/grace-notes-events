@@ -425,12 +425,42 @@ const EventDetail = () => {
           >
             <ArrowLeft className="h-4 w-4 text-foreground" strokeWidth={1.5} />
           </button>
-          <button
-            onClick={() => navigate("/")}
-            className="absolute top-12 right-5 flex h-9 w-9 items-center justify-center rounded-full bg-background/70 backdrop-blur-sm"
-          >
-            <Home className="h-4 w-4 text-foreground" strokeWidth={1.5} />
-          </button>
+          <div className="absolute top-12 right-5 flex gap-2">
+            {isHost && event.status !== 'cancelled' && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowHostMenu(!showHostMenu)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-background/70 backdrop-blur-sm"
+                >
+                  <MoreHorizontal className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+                </button>
+                {showHostMenu && (
+                  <div className="absolute right-0 top-11 w-44 rounded-2xl border border-border bg-card shadow-lg overflow-hidden z-30">
+                    <button
+                      onClick={() => { setShowHostMenu(false); navigate(`/create?edit=${id}`); }}
+                      className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-foreground hover:bg-secondary transition-colors"
+                    >
+                      <Pencil className="h-4 w-4" strokeWidth={1.5} />
+                      Edit event
+                    </button>
+                    <button
+                      onClick={() => { setShowHostMenu(false); setShowCancelConfirm(true); }}
+                      className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-destructive hover:bg-secondary transition-colors"
+                    >
+                      <Ban className="h-4 w-4" strokeWidth={1.5} />
+                      Cancel event
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              onClick={() => navigate("/")}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-background/70 backdrop-blur-sm"
+            >
+              <Home className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+            </button>
+          </div>
         </div>
       ) : (
         <div className="relative h-36 w-full bg-secondary flex items-center justify-center">
