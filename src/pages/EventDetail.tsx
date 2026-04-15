@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { EventChat } from "@/components/EventChat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -32,7 +33,7 @@ import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe
 import { getStripe, getStripeEnvironment } from "@/lib/stripe";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 
-type TabKey = "about" | "guests" | "updates" | "photos";
+type TabKey = "about" | "guests" | "chat" | "updates";
 
 const EventDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -329,11 +330,13 @@ const EventDetail = () => {
   const spotsLeft =
     event.capacity != null ? event.capacity - goingRsvps.length : null;
 
+  const canChat = isHost || myRsvp?.status === "going" || myRsvp?.status === "maybe";
+
   const tabs: { key: TabKey; label: string }[] = [
     { key: "about", label: "About" },
     { key: "guests", label: `Guests (${goingRsvps.length})` },
+    { key: "chat", label: "Chat" },
     { key: "updates", label: `Updates (${updates.length})` },
-    { key: "photos", label: `Photos (${photos.length})` },
   ];
 
   const rsvpButtons: {
@@ -500,7 +503,7 @@ const EventDetail = () => {
       {/* Tab content */}
       <div className="mx-auto max-w-lg px-5 mt-5">
         {tab === "about" && (
-          <div className="space-y-4">
+          <div className="space-y-6">
             {event.description ? (
               <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
                 {event.description}
@@ -509,6 +512,59 @@ const EventDetail = () => {
               <p className="text-sm text-muted-foreground italic">
                 No description provided.
               </p>
+            )}
+
+            {/* Photo gallery on About tab */}
+            {photos.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="label-meta text-muted-foreground">Photos ({photos.length})</h3>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {photos.slice(0, 9).map((photo: any, idx: number) => (
+                    <div
+                      key={photo.id}
+                      className="relative rounded-xl overflow-hidden aspect-square cursor-pointer"
+                      onClick={() => setLightboxIndex(idx)}
+                    >
+                      <img src={photo.image_url} alt="" className="h-full w-full object-cover" />
+                      {idx === 8 && photos.length > 9 && (
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                          <span className="text-white font-display text-lg">+{photos.length - 9}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Host photo upload */}
+            {isHost && (
+              <div>
+                <button
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={photoUploading}
+                  className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 transition-colors hover:bg-background"
+                >
+                  {photoUploading ? (
+                    <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
+                  ) : (
+                    <Camera className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                  )}
+                  <span className="text-sm text-muted-foreground">
+                    {photoUploading ? "Uploading…" : "Add photos"}
+                  </span>
+                </button>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handlePhotoUpload(file);
+                  }}
+                />
+              </div>
             )}
           </div>
         )}
@@ -692,72 +748,21 @@ const EventDetail = () => {
           </div>
         )}
 
-        {tab === "photos" && (
-          <div className="space-y-4">
-            {/* Upload button */}
-            <button
-              onClick={() => photoInputRef.current?.click()}
-              disabled={photoUploading}
-              className="w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card py-6 transition-colors hover:bg-background"
-            >
-              {photoUploading ? (
-                <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
-              ) : (
-                <Camera className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
-              )}
-              <span className="text-sm text-muted-foreground">
-                {photoUploading ? "Uploading…" : "Add a photo"}
-              </span>
-            </button>
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handlePhotoUpload(file);
-              }}
+        {tab === "chat" && (
+          canChat ? (
+            <EventChat
+              eventId={id!}
+              userId={user.id}
+              isHost={isHost}
+              eventTitle={event.title}
             />
-
-            {/* Photo grid */}
-            {photos.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                No photos yet — be the first to share!
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-sm text-muted-foreground">
+                RSVP to join the conversation.
               </p>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {photos.map((photo: any, idx: number) => (
-                  <div
-                    key={photo.id}
-                    className="relative rounded-xl overflow-hidden aspect-square cursor-pointer"
-                    onDoubleClick={() => setLightboxIndex(idx)}
-                  >
-                    <img
-                      src={photo.image_url}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent p-2 flex items-end justify-between">
-                      <span className="text-[10px] text-white/80">
-                        {photo.profiles?.full_name || "Member"}
-                      </span>
-                      <a
-                        href={photo.image_url}
-                        download
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="p-1 rounded-full bg-black/40 text-white/90 hover:bg-black/60 transition-colors"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+            </div>
+          )
         )}
       </div>
 
