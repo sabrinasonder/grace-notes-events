@@ -29,7 +29,7 @@ import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe
 import { getStripe, getStripeEnvironment } from "@/lib/stripe";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 
-type TabKey = "about" | "guests" | "updates";
+type TabKey = "about" | "guests" | "updates" | "photos";
 
 const EventDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -37,6 +37,13 @@ const EventDetail = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [updateBody, setUpdateBody] = useState("");
+  const [updateImage, setUpdateImage] = useState<File | null>(null);
+  const [updateImagePreview, setUpdateImagePreview] = useState<string | null>(null);
+  const [isPostingUpdate, setIsPostingUpdate] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const updateImageRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState<TabKey>("about");
   const [showCheckout, setShowCheckout] = useState(false);
 
