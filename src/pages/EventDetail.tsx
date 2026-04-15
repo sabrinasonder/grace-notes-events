@@ -22,6 +22,7 @@ import {
   ImagePlus,
   Camera,
   Loader2,
+  Download,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,7 @@ const EventDetail = () => {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState<TabKey>("about");
   const [showCheckout, setShowCheckout] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   // Fetch event
   const { data: event, isLoading } = useQuery({
@@ -659,7 +661,11 @@ const EventDetail = () => {
             ) : (
               <div className="grid grid-cols-2 gap-2">
                 {photos.map((photo: any) => (
-                  <div key={photo.id} className="relative rounded-xl overflow-hidden aspect-square">
+                  <div
+                    key={photo.id}
+                    className="relative rounded-xl overflow-hidden aspect-square cursor-pointer"
+                    onDoubleClick={() => setLightboxUrl(photo.image_url)}
+                  >
                     <img
                       src={photo.image_url}
                       alt=""
@@ -767,6 +773,40 @@ const EventDetail = () => {
             </div>
           </div>
         </>
+      )}
+
+      {/* Photo lightbox */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-sm"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <div className="absolute top-12 right-5 flex gap-3">
+            <a
+              href={lightboxUrl}
+              download
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-sm transition-colors hover:bg-white/25"
+            >
+              <Download className="h-5 w-5 text-white" strokeWidth={1.5} />
+            </a>
+            <button
+              onClick={() => setLightboxUrl(null)}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-sm transition-colors hover:bg-white/25"
+            >
+              <X className="h-5 w-5 text-white" strokeWidth={1.5} />
+            </button>
+          </div>
+          <img
+            src={lightboxUrl}
+            alt=""
+            className="max-h-[80vh] max-w-[90vw] rounded-xl object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <p className="mt-4 label-meta text-white/60">Double-tap photo to preview · tap outside to close</p>
+        </div>
       )}
     </div>
   );
