@@ -15,6 +15,9 @@ import {
   Check,
   HelpCircle,
   X,
+  Bell,
+  CircleDollarSign,
+  CircleAlert,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
