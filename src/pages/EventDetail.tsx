@@ -748,72 +748,21 @@ const EventDetail = () => {
           </div>
         )}
 
-        {tab === "photos" && (
-          <div className="space-y-4">
-            {/* Upload button */}
-            <button
-              onClick={() => photoInputRef.current?.click()}
-              disabled={photoUploading}
-              className="w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card py-6 transition-colors hover:bg-background"
-            >
-              {photoUploading ? (
-                <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
-              ) : (
-                <Camera className="h-5 w-5 text-muted-foreground" strokeWidth={1.5} />
-              )}
-              <span className="text-sm text-muted-foreground">
-                {photoUploading ? "Uploading…" : "Add a photo"}
-              </span>
-            </button>
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handlePhotoUpload(file);
-              }}
+        {tab === "chat" && (
+          canChat ? (
+            <EventChat
+              eventId={id!}
+              userId={user.id}
+              isHost={isHost}
+              eventTitle={event.title}
             />
-
-            {/* Photo grid */}
-            {photos.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                No photos yet — be the first to share!
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-sm text-muted-foreground">
+                RSVP to join the conversation.
               </p>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {photos.map((photo: any, idx: number) => (
-                  <div
-                    key={photo.id}
-                    className="relative rounded-xl overflow-hidden aspect-square cursor-pointer"
-                    onDoubleClick={() => setLightboxIndex(idx)}
-                  >
-                    <img
-                      src={photo.image_url}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent p-2 flex items-end justify-between">
-                      <span className="text-[10px] text-white/80">
-                        {photo.profiles?.full_name || "Member"}
-                      </span>
-                      <a
-                        href={photo.image_url}
-                        download
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="p-1 rounded-full bg-black/40 text-white/90 hover:bg-black/60 transition-colors"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+            </div>
+          )
         )}
       </div>
 
