@@ -196,11 +196,19 @@ const Archive = () => {
 
                     {/* Content */}
                     <div className="flex-1 p-4 space-y-1.5 min-w-0">
-                      <span className="pill-tag bg-secondary text-foreground text-[10px]">
-                        {format(new Date(event.starts_at), "MMM d, yyyy")}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="pill-tag bg-secondary text-foreground text-[10px]">
+                          {format(new Date(event.starts_at), "MMM d, yyyy")}
+                        </span>
+                        {isCancelled && (
+                          <span className="pill-tag bg-destructive text-destructive-foreground text-[10px]">
+                            Cancelled
+                          </span>
+                        )}
+                      </div>
                       <h3 className="font-display text-base text-foreground leading-tight truncate">
                         {event.title}
+                      </h3>
                       </h3>
 
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
