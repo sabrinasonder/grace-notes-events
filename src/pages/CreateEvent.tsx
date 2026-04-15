@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ArrowLeft, CalendarIcon, Home, ImagePlus } from "lucide-react";
@@ -17,6 +17,8 @@ const CreateEvent = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get("edit");
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -29,8 +31,54 @@ const CreateEvent = () => {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [loadingEvent, setLoadingEvent] = useState(!!editId);
 
-  if (loading) {
+  // Load existing event data when editing
+  useEffect(() => {
+    if (!editId || !user) return;
+
+    const loadEvent = async () => {
+      const { data, error } = await supabase
+        .from("events")
+        .select("*")
+        .eq("id", editId)
+        .single();
+
+      if (error || !data) {
+        toast({ title: "Event not found", variant: "destructive" });
+        navigate("/");
+        return;
+      }
+
+      // Only the host can edit
+      if (data.host_id !== user.id) {
+        toast({ title: "You can only edit your own events", variant: "destructive" });
+        navigate(`/event/${editId}`);
+        return;
+      }
+
+      setTitle(data.title);
+      setDescription(data.description || "");
+      setLocation(data.location || "");
+      setCapacity(data.capacity ? String(data.capacity) : "");
+      setPriceDollars(data.price_cents ? (data.price_cents / 100).toFixed(2) : "");
+      setAutoReminders(data.auto_reminders_enabled);
+
+      const startsAt = new Date(data.starts_at);
+      setDate(startsAt);
+      setTime(format(startsAt, "HH:mm"));
+
+      if (data.cover_image_url) {
+        setCoverPreview(data.cover_image_url);
+      }
+
+      setLoadingEvent(false);
+    };
+
+    loadEvent();
+  }, [editId, user]);
+
+  if (loading || loadingEvent) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="animate-pulse font-display text-2xl text-foreground">Loading…</div>
@@ -61,8 +109,8 @@ const CreateEvent = () => {
       const startsAt = new Date(date);
       startsAt.setHours(hours, minutes, 0, 0);
 
-      // Upload cover image if present
-      let coverUrl: string | null = null;
+      // Upload cover image if a new file was selected
+      let coverUrl: string | null | undefined = undefined;
       if (coverFile) {
         const ext = coverFile.name.split(".").pop();
         const path = `${user.id}/${Date.now()}.${ext}`;
@@ -81,26 +129,55 @@ const CreateEvent = () => {
         ? Math.round(parseFloat(priceDollars) * 100)
         : 0;
 
-      const { data, error } = await supabase
-        .from("events")
-        .insert({
-          host_id: user.id,
+      if (editId) {
+        // Update existing event
+        const updatePayload: Record<string, any> = {
           title,
           description: description || null,
-          cover_image_url: coverUrl,
           starts_at: startsAt.toISOString(),
           location: location || null,
           capacity: capacity ? parseInt(capacity) : null,
           price_cents: priceCents,
           auto_reminders_enabled: autoReminders,
-        })
-        .select("id")
-        .single();
+        };
 
-      if (error) throw error;
+        // Only update cover if a new one was uploaded
+        if (coverUrl !== undefined) {
+          updatePayload.cover_image_url = coverUrl;
+        }
 
-      toast({ title: "Event created!" });
-      navigate(`/event/${data.id}`);
+        const { error } = await supabase
+          .from("events")
+          .update(updatePayload)
+          .eq("id", editId);
+
+        if (error) throw error;
+
+        toast({ title: "Event updated!" });
+        navigate(`/event/${editId}`);
+      } else {
+        // Create new event
+        const { data, error } = await supabase
+          .from("events")
+          .insert({
+            host_id: user.id,
+            title,
+            description: description || null,
+            cover_image_url: coverUrl ?? null,
+            starts_at: startsAt.toISOString(),
+            location: location || null,
+            capacity: capacity ? parseInt(capacity) : null,
+            price_cents: priceCents,
+            auto_reminders_enabled: autoReminders,
+          })
+          .select("id")
+          .single();
+
+        if (error) throw error;
+
+        toast({ title: "Event created!" });
+        navigate(`/event/${data.id}`);
+      }
     } catch (err: any) {
       toast({
         title: "Something went wrong",
@@ -125,7 +202,7 @@ const CreateEvent = () => {
             <span className="label-meta">Back</span>
           </button>
           <h1 className="flex-1 text-center font-display text-lg text-foreground">
-            Create Event
+            {editId ? "Edit Event" : "Create Event"}
           </h1>
           <button
             onClick={() => navigate("/")}
@@ -226,7 +303,6 @@ const CreateEvent = () => {
                   mode="single"
                   selected={date}
                   onSelect={setDate}
-                  disabled={(d) => d < new Date()}
                   initialFocus
                   className={cn("p-3 pointer-events-auto")}
                 />
@@ -323,7 +399,9 @@ const CreateEvent = () => {
           className="w-full rounded-full bg-primary py-3.5 transition-all hover:opacity-90 disabled:opacity-50"
         >
           <span className="label-meta text-primary-foreground">
-            {submitting ? "Creating…" : "Create Event"}
+            {submitting
+              ? editId ? "Saving…" : "Creating…"
+              : editId ? "Save Changes" : "Create Event"}
           </span>
         </button>
       </form>
