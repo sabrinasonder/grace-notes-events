@@ -571,9 +571,11 @@ const EventDetail = () => {
 const GuestSection = ({
   label,
   rsvps,
+  showPaymentStatus = false,
 }: {
   label: string;
   rsvps: any[];
+  showPaymentStatus?: boolean;
 }) => (
   <div className="space-y-3">
     <h3 className="label-meta text-muted-foreground">{label}</h3>
@@ -599,6 +601,16 @@ const GuestSection = ({
             <span className="text-sm text-foreground">
               {profile?.full_name || "Member"}
             </span>
+            {showPaymentStatus && (
+              <span className={cn(
+                "ml-auto pill-tag",
+                rsvp.paid
+                  ? "bg-sage text-sage-foreground"
+                  : "border border-destructive/30 text-destructive"
+              )}>
+                {rsvp.paid ? "Paid" : "Unpaid"}
+              </span>
+            )}
           </div>
         );
       })}
