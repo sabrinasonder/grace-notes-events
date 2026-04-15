@@ -69,7 +69,7 @@ const Index = () => {
     <div className="min-h-screen bg-background pb-28">
       {/* Account bar — top */}
       <div className="sticky top-0 left-0 right-0 border-b border-border bg-background/80 backdrop-blur-lg z-20">
-        <div className="mx-auto flex max-w-lg items-center justify-end px-5 py-3">
+        <div className="mx-auto flex max-w-lg items-center justify-center px-5 py-3">
           <div className="flex gap-2">
             <button
               onClick={() => navigate("/archive")}
