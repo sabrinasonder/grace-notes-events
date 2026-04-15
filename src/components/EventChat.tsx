@@ -120,12 +120,14 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProp
 
       // If image was posted, also add to event_photos
       if (imageUrl) {
-        await supabase.from("event_photos").insert({
-          event_id: eventId,
-          uploaded_by: userId,
-          image_url: imageUrl,
-          source: "chat",
-        }).catch(() => {});
+        try {
+          await supabase.from("event_photos").insert({
+            event_id: eventId,
+            uploaded_by: userId,
+            image_url: imageUrl,
+            source: "chat",
+          });
+        } catch {}
       }
 
       setBody("");
