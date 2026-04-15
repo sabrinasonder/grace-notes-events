@@ -1183,7 +1183,6 @@ const EventDetail = () => {
         <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-cream bg-background">
           <div className="px-6 py-3">
             <div className="mx-auto max-w-lg">
-            <div className="mx-auto max-w-lg">
               {hasPendingRequest ? (
                 <div className="flex items-center justify-center gap-2 rounded-full border border-blush/30 bg-blush/10 py-3.5">
                   <Clock className="h-4 w-4 text-blush" strokeWidth={1.5} />
