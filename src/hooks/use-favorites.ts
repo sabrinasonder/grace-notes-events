@@ -34,7 +34,10 @@ export function useFavorites() {
         const { error } = await supabase
           .from("event_favorites")
           .insert({ user_id: user!.id, event_id: eventId });
-        if (error) throw error;
+        if (error) {
+          console.error("Failed to insert favorite:", error);
+          throw error;
+        }
         return { action: "added" as const };
       }
     },
