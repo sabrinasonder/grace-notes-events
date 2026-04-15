@@ -28,6 +28,7 @@ const EventDetail = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabKey>("about");
+  const [checkingOut, setCheckingOut] = useState(false);
 
   // Fetch event
   const { data: event, isLoading } = useQuery({
@@ -116,6 +117,32 @@ const EventDetail = () => {
       });
     },
   });
+
+  const handleCheckout = async () => {
+    setCheckingOut(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: {
+          event_id: id,
+          success_url: window.location.href,
+          cancel_url: window.location.href,
+        },
+      });
+      if (error) throw error;
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("No checkout URL returned");
+      }
+    } catch (err: any) {
+      toast({
+        title: "Payment failed",
+        description: err.message,
+        variant: "destructive",
+      });
+      setCheckingOut(false);
+    }
+  };
 
   if (authLoading || isLoading) {
     return (
@@ -438,19 +465,29 @@ const EventDetail = () => {
         </div>
       )}
 
-      {/* For paid events show a placeholder message */}
+      {/* Paid events — checkout or paid confirmation */}
       {!isFree && !isHost && (
         <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-lg z-20">
           <div className="mx-auto max-w-lg px-5 py-4">
-            <div className="flex items-center justify-center gap-2 rounded-full bg-card border border-border py-3">
-              <DollarSign
-                className="h-4 w-4 text-muted-foreground"
-                strokeWidth={1.5}
-              />
-              <span className="label-meta text-muted-foreground">
-                Payment coming soon
-              </span>
-            </div>
+            {myRsvp?.paid ? (
+              <div className="flex items-center justify-center gap-2 rounded-full bg-primary py-3">
+                <Check className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
+                <span className="label-meta text-primary-foreground">
+                  You're going — Paid
+                </span>
+              </div>
+            ) : (
+              <button
+                onClick={handleCheckout}
+                disabled={checkingOut}
+                className="w-full flex items-center justify-center gap-2 rounded-full bg-primary py-3.5 transition-all hover:opacity-90 disabled:opacity-50"
+              >
+                <DollarSign className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
+                <span className="label-meta text-primary-foreground">
+                  {checkingOut ? "Redirecting…" : `Pay $${(event.price_cents / 100).toFixed(0)} & RSVP`}
+                </span>
+              </button>
+            )}
           </div>
         </div>
       )}
