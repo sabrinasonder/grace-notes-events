@@ -498,7 +498,12 @@ const EventDetail = () => {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <span className="label-meta">{t.label}</span>
+              <span className="label-meta relative">
+                {t.label}
+                {t.hasUnread && tab !== t.key && (
+                  <span className="absolute -top-1 -right-2 h-1.5 w-1.5 rounded-full bg-accent" />
+                )}
+              </span>
             </button>
           ))}
         </div>
@@ -759,6 +764,11 @@ const EventDetail = () => {
               userId={user.id}
               isHost={isHost}
               eventTitle={event.title}
+              onUnreadCountChange={(count) => {
+                if (count === 0) {
+                  queryClient2.invalidateQueries({ queryKey: ["chat_unread", id, user.id] });
+                }
+              }}
             />
           ) : (
             <div className="text-center py-12">
