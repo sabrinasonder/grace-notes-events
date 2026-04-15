@@ -33,13 +33,13 @@ const Archive = () => {
 
       const rsvpEventIds = myRsvps?.map((r) => r.event_id) || [];
 
-      // Get all past events
+      // Get all past events (completed or cancelled)
       const { data: allPast, error } = await supabase
         .from("events")
         .select(
           "*, profiles!events_host_id_fkey(full_name, avatar_url), rsvps(id, status)"
         )
-        .lt("starts_at", new Date().toISOString())
+        .or("starts_at.lt." + new Date().toISOString() + ",status.eq.cancelled")
         .order("starts_at", { ascending: false });
 
       if (error) throw error;
@@ -170,11 +170,13 @@ const Archive = () => {
               const hostProfile = event.profiles;
               const photoCount = (photoCounts as Record<string, number>)[event.id] || 0;
 
+              const isCancelled = event.status === 'cancelled';
+
               return (
                 <button
                   key={event.id}
                   onClick={() => navigate(`/event/${event.id}`)}
-                  className="w-full text-left rounded-3xl border border-border bg-card overflow-hidden transition-transform active:scale-[0.98]"
+                  className={`w-full text-left rounded-3xl border border-border bg-card overflow-hidden transition-transform active:scale-[0.98] ${isCancelled ? 'opacity-60' : ''}`}
                 >
                   <div className="flex">
                     {/* Cover thumbnail */}
@@ -194,9 +196,16 @@ const Archive = () => {
 
                     {/* Content */}
                     <div className="flex-1 p-4 space-y-1.5 min-w-0">
-                      <span className="pill-tag bg-secondary text-foreground text-[10px]">
-                        {format(new Date(event.starts_at), "MMM d, yyyy")}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="pill-tag bg-secondary text-foreground text-[10px]">
+                          {format(new Date(event.starts_at), "MMM d, yyyy")}
+                        </span>
+                        {isCancelled && (
+                          <span className="pill-tag bg-destructive text-destructive-foreground text-[10px]">
+                            Cancelled
+                          </span>
+                        )}
+                      </div>
                       <h3 className="font-display text-base text-foreground leading-tight truncate">
                         {event.title}
                       </h3>

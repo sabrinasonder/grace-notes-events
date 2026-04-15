@@ -26,6 +26,9 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
+  MoreHorizontal,
+  Pencil,
+  Ban,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -51,6 +54,9 @@ const EventDetail = () => {
   const [tab, setTab] = useState<TabKey>("about");
   const [showCheckout, setShowCheckout] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [showHostMenu, setShowHostMenu] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
 
   const { data: event, isLoading } = useQuery({
@@ -127,6 +133,29 @@ const EventDetail = () => {
   const canChatEarly = event?.host_id === user?.id || myRsvp?.status === "going" || myRsvp?.status === "maybe";
   const unreadChatCount = useUnreadChatCount(id, user?.id, !!canChatEarly);
   const queryClient2 = useQueryClient();
+
+  // Cancel event handler (host only)
+  const handleCancelEvent = async () => {
+    if (!user || !id || !event) return;
+    setIsCancelling(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("cancel-event", {
+        body: {
+          eventId: id,
+          appUrl: window.location.origin,
+        },
+      });
+      if (error) throw error;
+      setShowCancelConfirm(false);
+      queryClient.invalidateQueries({ queryKey: ["event", id] });
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      toast({ title: "Event cancelled", description: "All guests have been notified." });
+    } catch (err: any) {
+      toast({ title: "Failed to cancel event", description: err.message, variant: "destructive" });
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
   // Post an update (host only)
   const handlePostUpdate = async () => {
@@ -396,12 +425,42 @@ const EventDetail = () => {
           >
             <ArrowLeft className="h-4 w-4 text-foreground" strokeWidth={1.5} />
           </button>
-          <button
-            onClick={() => navigate("/")}
-            className="absolute top-12 right-5 flex h-9 w-9 items-center justify-center rounded-full bg-background/70 backdrop-blur-sm"
-          >
-            <Home className="h-4 w-4 text-foreground" strokeWidth={1.5} />
-          </button>
+          <div className="absolute top-12 right-5 flex gap-2">
+            {isHost && event.status !== 'cancelled' && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowHostMenu(!showHostMenu)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-background/70 backdrop-blur-sm"
+                >
+                  <MoreHorizontal className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+                </button>
+                {showHostMenu && (
+                  <div className="absolute right-0 top-11 w-44 rounded-2xl border border-border bg-card shadow-lg overflow-hidden z-30">
+                    <button
+                      onClick={() => { setShowHostMenu(false); navigate(`/create?edit=${id}`); }}
+                      className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-foreground hover:bg-secondary transition-colors"
+                    >
+                      <Pencil className="h-4 w-4" strokeWidth={1.5} />
+                      Edit event
+                    </button>
+                    <button
+                      onClick={() => { setShowHostMenu(false); setShowCancelConfirm(true); }}
+                      className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-destructive hover:bg-secondary transition-colors"
+                    >
+                      <Ban className="h-4 w-4" strokeWidth={1.5} />
+                      Cancel event
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              onClick={() => navigate("/")}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-background/70 backdrop-blur-sm"
+            >
+              <Home className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+            </button>
+          </div>
         </div>
       ) : (
         <div className="relative h-36 w-full bg-secondary flex items-center justify-center">
@@ -415,24 +474,59 @@ const EventDetail = () => {
           >
             <ArrowLeft className="h-4 w-4 text-foreground" strokeWidth={1.5} />
           </button>
-          <button
-            onClick={() => navigate("/")}
-            className="absolute top-12 right-5 flex h-9 w-9 items-center justify-center rounded-full bg-background/70 backdrop-blur-sm"
-          >
-            <Home className="h-4 w-4 text-foreground" strokeWidth={1.5} />
-          </button>
+          <div className="absolute top-12 right-5 flex gap-2">
+            {isHost && event.status !== 'cancelled' && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowHostMenu(!showHostMenu)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-background/70 backdrop-blur-sm"
+                >
+                  <MoreHorizontal className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+                </button>
+                {showHostMenu && (
+                  <div className="absolute right-0 top-11 w-44 rounded-2xl border border-border bg-card shadow-lg overflow-hidden z-30">
+                    <button
+                      onClick={() => { setShowHostMenu(false); navigate(`/create?edit=${id}`); }}
+                      className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-foreground hover:bg-secondary transition-colors"
+                    >
+                      <Pencil className="h-4 w-4" strokeWidth={1.5} />
+                      Edit event
+                    </button>
+                    <button
+                      onClick={() => { setShowHostMenu(false); setShowCancelConfirm(true); }}
+                      className="flex w-full items-center gap-2.5 px-4 py-3 text-sm text-destructive hover:bg-secondary transition-colors"
+                    >
+                      <Ban className="h-4 w-4" strokeWidth={1.5} />
+                      Cancel event
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              onClick={() => navigate("/")}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-background/70 backdrop-blur-sm"
+            >
+              <Home className="h-4 w-4 text-foreground" strokeWidth={1.5} />
+            </button>
+          </div>
         </div>
       )}
 
       {/* Event header */}
       <div className="mx-auto max-w-lg px-5 -mt-6 relative z-10">
         <div className="space-y-4">
-          {/* Price pill */}
+          {/* Status pills */}
           <div className="flex items-center gap-2">
+            {event.status === 'cancelled' && (
+              <span className="pill-tag bg-destructive text-destructive-foreground">
+                Cancelled
+              </span>
+            )}
             <span className="pill-tag bg-primary text-primary-foreground">
               {isFree ? "Free" : `$${(event.price_cents / 100).toFixed(0)}`}
             </span>
-            {!isFree && (
+            {!isFree && event.status !== 'cancelled' && (
               <span className="pill-tag border border-border text-muted-foreground">
                 Payment required
               </span>
@@ -793,7 +887,14 @@ const EventDetail = () => {
         )}
 
         {tab === "chat" && (
-          canChat ? (
+          event.status === 'cancelled' ? (
+            <div className="text-center py-12 space-y-2">
+              <Ban className="h-6 w-6 text-muted-foreground mx-auto" strokeWidth={1.5} />
+              <p className="text-sm text-muted-foreground">
+                This event was cancelled. The chat is now closed.
+              </p>
+            </div>
+          ) : canChat ? (
             <EventChat
               eventId={id!}
               userId={user.id}
@@ -816,7 +917,7 @@ const EventDetail = () => {
       </div>
 
       {/* RSVP bar — free events (hosts included) */}
-      {isFree && (
+      {isFree && event.status !== 'cancelled' && (
         <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/80 backdrop-blur-lg z-20">
           <div className="mx-auto max-w-lg px-5 py-4">
             {isHost && (
@@ -852,7 +953,7 @@ const EventDetail = () => {
       )}
 
       {/* Paid events — embedded checkout or paid confirmation (hosts included) */}
-      {!isFree && (
+      {!isFree && event.status !== 'cancelled' && (
         <>
           {showCheckout && !myRsvp?.paid && (
             <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm overflow-y-auto">
@@ -969,6 +1070,36 @@ const EventDetail = () => {
           </div>
         );
       })()}
+
+      {/* Cancel event confirmation modal */}
+      {showCancelConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-5">
+          <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 space-y-4">
+            <h2 className="font-display text-xl text-foreground">
+              Cancel {event.title}?
+            </h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              This will notify all guests and refund anyone who's paid. This can't be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCancelConfirm(false)}
+                disabled={isCancelling}
+                className="flex-1 rounded-full border border-border bg-card py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+              >
+                Keep event
+              </button>
+              <button
+                onClick={handleCancelEvent}
+                disabled={isCancelling}
+                className="flex-1 rounded-full bg-destructive py-3 text-sm font-medium text-destructive-foreground transition-colors hover:opacity-90 disabled:opacity-50"
+              >
+                {isCancelling ? "Cancelling…" : "Cancel event"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

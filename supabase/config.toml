@@ -25,3 +25,5 @@ project_id = "zenpfltyblaftzyklems"
     verify_jwt = false
   [functions.unread-digest]
     verify_jwt = false
+  [functions.cancel-event]
+    verify_jwt = false
