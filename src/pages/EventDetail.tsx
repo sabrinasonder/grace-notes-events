@@ -91,8 +91,89 @@ const EventDetail = () => {
     enabled: !!id && !!user,
   });
 
+  // Fetch event photos
+  const { data: photos = [] } = useQuery({
+    queryKey: ["event_photos", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_photos")
+        .select("*, profiles!event_photos_uploaded_by_fkey(full_name, avatar_url)")
+        .eq("event_id", id!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!id && !!user,
+  });
+
   // Current user's RSVP
   const myRsvp = rsvps.find((r: any) => r.user_id === user?.id);
+
+  // Post an update (host only)
+  const handlePostUpdate = async () => {
+    if (!updateBody.trim() || !user || !id) return;
+    setIsPostingUpdate(true);
+    try {
+      let imageUrl: string | null = null;
+      if (updateImage) {
+        const ext = updateImage.name.split(".").pop();
+        const path = `updates/${id}/${crypto.randomUUID()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from("event-images")
+          .upload(path, updateImage);
+        if (uploadErr) throw uploadErr;
+        const { data: urlData } = supabase.storage
+          .from("event-images")
+          .getPublicUrl(path);
+        imageUrl = urlData.publicUrl;
+      }
+      const { error } = await supabase.from("updates").insert({
+        event_id: id,
+        author_id: user.id,
+        body: updateBody.trim(),
+        image_url: imageUrl,
+      });
+      if (error) throw error;
+      setUpdateBody("");
+      setUpdateImage(null);
+      setUpdateImagePreview(null);
+      queryClient.invalidateQueries({ queryKey: ["updates", id] });
+      toast({ title: "Update posted" });
+    } catch (err: any) {
+      toast({ title: "Failed to post update", description: err.message, variant: "destructive" });
+    } finally {
+      setIsPostingUpdate(false);
+    }
+  };
+
+  // Upload a photo (any RSVP'd user)
+  const handlePhotoUpload = async (file: File) => {
+    if (!user || !id) return;
+    setPhotoUploading(true);
+    try {
+      const ext = file.name.split(".").pop();
+      const path = `photos/${id}/${crypto.randomUUID()}.${ext}`;
+      const { error: uploadErr } = await supabase.storage
+        .from("event-images")
+        .upload(path, file);
+      if (uploadErr) throw uploadErr;
+      const { data: urlData } = supabase.storage
+        .from("event-images")
+        .getPublicUrl(path);
+      const { error } = await supabase.from("event_photos").insert({
+        event_id: id,
+        uploaded_by: user.id,
+        image_url: urlData.publicUrl,
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["event_photos", id] });
+      toast({ title: "Photo uploaded" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
 
   // RSVP mutation
   const rsvpMutation = useMutation({
