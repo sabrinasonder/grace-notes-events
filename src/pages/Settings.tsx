@@ -199,6 +199,9 @@ const Settings = () => {
         <div className="space-y-3">
           <h2 className="label-meta text-muted-foreground">Account</h2>
           <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+            {profile?.full_name && (
+              <p className="font-serif text-lg text-foreground">{profile.full_name}</p>
+            )}
             <p className="text-xs text-muted-foreground">{user.email}</p>
             <div className="space-y-1.5">
               <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
