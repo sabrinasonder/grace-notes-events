@@ -16,6 +16,7 @@ import { template as unreadMessagesDigest } from './unread-messages-digest.tsx'
 import { template as eventCancellation } from './event-cancellation.tsx'
 import { template as circleInvite } from './circle-invite.tsx'
 import { template as joinRequestApproved } from './join-request-approved.tsx'
+import { template as joinRequestDeclined } from './join-request-declined.tsx'
 
 export const TEMPLATES: Record<string, TemplateEntry> = {
   'rsvp-confirmation': rsvpConfirmation,
@@ -25,4 +26,5 @@ export const TEMPLATES: Record<string, TemplateEntry> = {
   'event-cancellation': eventCancellation,
   'circle-invite': circleInvite,
   'join-request-approved': joinRequestApproved,
+  'join-request-declined': joinRequestDeclined,
 }
