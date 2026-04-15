@@ -40,6 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
       options: {
         emailRedirectTo: window.location.origin,
+        shouldCreateUser: false,
       },
     });
     return { error: error as Error | null };
