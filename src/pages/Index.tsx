@@ -4,8 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useMemo, useRef } from "react";
 import { format, isToday, addDays, isBefore } from "date-fns";
-import { Plus, Calendar, Users, Heart, Home, User, Sparkles } from "lucide-react";
+import { Calendar, Users, Heart, Sparkles } from "lucide-react";
 import { useFavorites } from "@/hooks/use-favorites";
+import { BottomNav } from "@/components/BottomNav";
 
 type FilterMode = "going" | "hosting";
 
@@ -395,23 +396,7 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Bottom navigation bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-cream bg-background">
-        <div className="mx-auto flex max-w-lg items-center justify-around px-6 py-3" style={{ height: 70 }}>
-          <button onClick={() => navigate("/")} className="flex flex-col items-center gap-1">
-            <Home className={`h-[22px] w-[22px] ${isHomePage ? "text-cocoa" : "text-taupe"}`} strokeWidth={1.5} />
-          </button>
-          <button
-            onClick={() => navigate("/create")}
-            className="-mt-6 flex h-12 w-12 items-center justify-center rounded-full bg-cocoa shadow-lg transition-transform active:scale-95"
-          >
-            <Plus className="h-5 w-5 text-background" strokeWidth={2} />
-          </button>
-          <button onClick={() => navigate("/settings")} className="flex flex-col items-center gap-1">
-            <User className={`h-[22px] w-[22px] ${location.pathname === "/settings" ? "text-cocoa" : "text-taupe"}`} strokeWidth={1.5} />
-          </button>
-        </div>
-      </div>
+      <BottomNav />
     </div>
   );
 };
