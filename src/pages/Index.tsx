@@ -2,9 +2,10 @@ import { useAuth } from "@/lib/auth";
 import { Navigate, useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState, useMemo } from "react";
-import { format, isToday, addDays, isBefore, isAfter } from "date-fns";
-import { Plus, Calendar, MapPin, Users, Heart, Home, User, Sparkles } from "lucide-react";
+import { useState, useMemo, useRef } from "react";
+import { format, isToday, addDays, isBefore } from "date-fns";
+import { Plus, Calendar, Users, Heart, Home, User, Sparkles } from "lucide-react";
+import { useFavorites } from "@/hooks/use-favorites";
 
 type FilterMode = "going" | "hosting";
 
@@ -29,10 +30,12 @@ function getGreeting() {
 }
 
 const Index = () => {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mode, setMode] = useState<FilterMode>("going");
+  const { favorites, isFavorited, toggleFavorite } = useFavorites();
+  const heartedScrollRef = useRef<HTMLDivElement>(null);
 
   // Profile
   const { data: profile } = useQuery({
@@ -72,6 +75,25 @@ const Index = () => {
       return data || [];
     },
     enabled: !!user,
+  });
+
+  // Hearted events data
+  const { data: heartedEvents = [] } = useQuery({
+    queryKey: ["hearted-events", favorites],
+    queryFn: async () => {
+      if (favorites.length === 0) return [];
+      const { data, error } = await supabase
+        .from("events")
+        .select("*, profiles!events_host_id_fkey(full_name, avatar_url)")
+        .in("id", favorites)
+        .gte("starts_at", new Date().toISOString())
+        .eq("status", "active")
+        .order("starts_at", { ascending: true })
+        .limit(5);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user && favorites.length > 0,
   });
 
   // Pending RSVP requests for events I host
@@ -156,12 +178,17 @@ const Index = () => {
             )}
           </div>
 
-          {/* Top-right heart placeholder */}
+          {/* Top-right heart */}
           <button
-            onClick={(e) => { e.stopPropagation(); }}
+            onClick={(e) => { e.stopPropagation(); toggleFavorite(event.id); }}
             className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/90"
           >
-            <Heart className="h-4 w-4 text-cocoa" strokeWidth={1.5} />
+            <Heart
+              className="h-4 w-4"
+              strokeWidth={1.5}
+              fill={isFavorited(event.id) ? "#D89B86" : "none"}
+              color={isFavorited(event.id) ? "#D89B86" : "#3A2A20"}
+            />
           </button>
 
           {/* Bottom overlay text */}
@@ -201,13 +228,13 @@ const Index = () => {
     );
   };
 
-  const renderSectionHeader = (title: string, showSeeAll?: boolean) => (
+  const renderSectionHeader = (title: string, onSeeAll?: () => void) => (
     <div className="flex items-baseline justify-between mb-4">
       <h2 className="font-serif text-[22px] font-normal text-espresso" style={{ letterSpacing: "-0.01em" }}>
         {title}
       </h2>
-      {showSeeAll && (
-        <button className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-taupe">
+      {onSeeAll && (
+        <button onClick={onSeeAll} className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-taupe">
           See all
         </button>
       )}
@@ -221,7 +248,6 @@ const Index = () => {
       {/* Editorial greeting header */}
       <div className="px-6 pt-8 pb-5">
         <div className="mx-auto max-w-lg">
-          {/* Top row: date + mode toggle */}
           <div className="flex items-center justify-between mb-4">
             <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.25em] text-taupe">
               {format(now, "EEEE, MMMM d")}
@@ -234,7 +260,6 @@ const Index = () => {
             </button>
           </div>
 
-          {/* Greeting */}
           <h1 className="font-serif text-[38px] font-normal text-espresso leading-[1.1]" style={{ letterSpacing: "-0.02em" }}>
             {getGreeting()}
           </h1>
@@ -242,7 +267,6 @@ const Index = () => {
             {firstName}
           </p>
 
-          {/* Activity summary */}
           <div className="flex items-center gap-1.5 mt-4">
             <Sparkles className="h-3.5 w-3.5 text-blush flex-shrink-0" strokeWidth={1.5} />
             <p className="font-sans text-xs text-cocoa">
@@ -263,6 +287,65 @@ const Index = () => {
           </div>
         </div>
       </div>
+
+      {/* Hearted events horizontal scroll */}
+      {heartedEvents.length > 0 && (
+        <div className="mb-6">
+          <div className="px-6">
+            <div className="mx-auto max-w-lg">
+              {renderSectionHeader("Hearted", () => navigate("/hearted"))}
+            </div>
+          </div>
+          <div className="px-6">
+            <div className="mx-auto max-w-lg">
+              <div
+                ref={heartedScrollRef}
+                className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide"
+                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+              >
+                {heartedEvents.map((event: any) => {
+                  const eventDate = new Date(event.starts_at);
+                  return (
+                    <button
+                      key={event.id}
+                      onClick={() => navigate(`/event/${event.id}`)}
+                      className="flex-shrink-0 w-40 rounded-2xl overflow-hidden shadow-sm transition-transform active:scale-[0.97]"
+                      style={{ height: 200 }}
+                    >
+                      <div className="relative h-full w-full">
+                        {event.cover_image_url ? (
+                          <img src={event.cover_image_url} alt={event.title} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="h-full w-full" style={{ background: getGradient(event.id) }} />
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+
+                        {/* Heart icon */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleFavorite(event.id); }}
+                          className="absolute top-2.5 right-2.5 flex h-6 w-6 items-center justify-center rounded-full bg-white/90"
+                        >
+                          <Heart className="h-3 w-3" fill="#D89B86" color="#D89B86" strokeWidth={1.5} />
+                        </button>
+
+                        {/* Bottom text */}
+                        <div className="absolute bottom-3 left-3 right-3">
+                          <p className="font-sans text-[8px] font-semibold uppercase tracking-[0.2em] text-white/80 mb-0.5">
+                            {format(eventDate, "EEE, MMM d")}
+                          </p>
+                          <h4 className="font-serif text-sm font-normal leading-tight text-white line-clamp-2">
+                            {event.title}
+                          </h4>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Event cards */}
       <div className="px-6">
@@ -315,27 +398,16 @@ const Index = () => {
       {/* Bottom navigation bar */}
       <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-cream bg-background">
         <div className="mx-auto flex max-w-lg items-center justify-around px-6 py-3" style={{ height: 70 }}>
-          {/* Home */}
-          <button
-            onClick={() => navigate("/")}
-            className="flex flex-col items-center gap-1"
-          >
+          <button onClick={() => navigate("/")} className="flex flex-col items-center gap-1">
             <Home className={`h-[22px] w-[22px] ${isHomePage ? "text-cocoa" : "text-taupe"}`} strokeWidth={1.5} />
           </button>
-
-          {/* Create — floating circle */}
           <button
             onClick={() => navigate("/create")}
             className="-mt-6 flex h-12 w-12 items-center justify-center rounded-full bg-cocoa shadow-lg transition-transform active:scale-95"
           >
             <Plus className="h-5 w-5 text-background" strokeWidth={2} />
           </button>
-
-          {/* Profile */}
-          <button
-            onClick={() => navigate("/settings")}
-            className="flex flex-col items-center gap-1"
-          >
+          <button onClick={() => navigate("/settings")} className="flex flex-col items-center gap-1">
             <User className={`h-[22px] w-[22px] ${location.pathname === "/settings" ? "text-cocoa" : "text-taupe"}`} strokeWidth={1.5} />
           </button>
         </div>
