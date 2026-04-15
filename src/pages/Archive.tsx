@@ -170,11 +170,13 @@ const Archive = () => {
               const hostProfile = event.profiles;
               const photoCount = (photoCounts as Record<string, number>)[event.id] || 0;
 
+              const isCancelled = event.status === 'cancelled';
+
               return (
                 <button
                   key={event.id}
                   onClick={() => navigate(`/event/${event.id}`)}
-                  className="w-full text-left rounded-3xl border border-border bg-card overflow-hidden transition-transform active:scale-[0.98]"
+                  className={`w-full text-left rounded-3xl border border-border bg-card overflow-hidden transition-transform active:scale-[0.98] ${isCancelled ? 'opacity-60' : ''}`}
                 >
                   <div className="flex">
                     {/* Cover thumbnail */}
