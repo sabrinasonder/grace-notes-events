@@ -82,6 +82,40 @@ serve(async (req: Request) => {
           });
         }
 
+        // Send payment receipt email
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("email")
+          .eq("id", userId)
+          .single();
+
+        const { data: eventData } = await supabase
+          .from("events")
+          .select("title, starts_at, price_cents")
+          .eq("id", eventId)
+          .single();
+
+        if (profile?.email && eventData) {
+          await supabase.functions.invoke("send-transactional-email", {
+            body: {
+              templateName: "payment-receipt",
+              recipientEmail: profile.email,
+              idempotencyKey: `payment-receipt-${session.id}`,
+              templateData: {
+                eventTitle: eventData.title,
+                amount: `$${(eventData.price_cents / 100).toFixed(2)}`,
+                eventDate: new Date(eventData.starts_at).toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                }),
+              },
+            },
+          });
+        }
+
         console.log(`Payment completed for event ${eventId}, user ${userId}`);
         break;
       }

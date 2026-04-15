@@ -142,18 +142,47 @@ const EventDetail = () => {
           .getPublicUrl(path);
         imageUrl = urlData.publicUrl;
       }
-      const { error } = await supabase.from("updates").insert({
+      const { data: insertedUpdate, error } = await supabase.from("updates").insert({
         event_id: id,
         author_id: user.id,
         body: updateBody.trim(),
         image_url: imageUrl,
-      });
+      }).select("id").single();
       if (error) throw error;
       setUpdateBody("");
       setUpdateImage(null);
       setUpdateImagePreview(null);
       queryClient.invalidateQueries({ queryKey: ["updates", id] });
       toast({ title: "Update posted" });
+
+      // Send host update email to all going/maybe RSVPs (fire-and-forget)
+      if (insertedUpdate && event) {
+        const attendeeRsvps = rsvps.filter((r: any) => r.status === "going" || r.status === "maybe");
+        for (const rsvp of attendeeRsvps) {
+          const profile = (rsvp as any).profiles;
+          // Get email from profiles table
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("email")
+            .eq("id", rsvp.user_id)
+            .single();
+          if (profileData?.email) {
+            supabase.functions.invoke("send-transactional-email", {
+              body: {
+                templateName: "host-update",
+                recipientEmail: profileData.email,
+                idempotencyKey: `host-update-${insertedUpdate.id}-${rsvp.user_id}`,
+                templateData: {
+                  eventTitle: event.title,
+                  hostName: (event.profiles as any)?.full_name || "Your host",
+                  message: updateBody.trim(),
+                  eventUrl: `${window.location.origin}/event/${id}`,
+                },
+              },
+            }).catch(() => {});
+          }
+        }
+      }
     } catch (err: any) {
       toast({ title: "Failed to post update", description: err.message, variant: "destructive" });
     } finally {
@@ -201,26 +230,48 @@ const EventDetail = () => {
             .delete()
             .eq("id", myRsvp.id);
           if (error) throw error;
+          return { action: "removed" as const, status };
         } else {
           const { error } = await supabase
             .from("rsvps")
             .update({ status })
             .eq("id", myRsvp.id);
           if (error) throw error;
+          return { action: "updated" as const, status };
         }
       } else {
+        const rsvpId = crypto.randomUUID();
         const { error } = await supabase.from("rsvps").insert({
+          id: rsvpId,
           event_id: id!,
           user_id: user!.id,
           status,
           paid: false,
         });
         if (error) throw error;
+        return { action: "created" as const, status, rsvpId };
       }
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["rsvps", id] });
       queryClient.invalidateQueries({ queryKey: ["events"] });
+
+      // Send RSVP confirmation email (fire-and-forget)
+      if (result && result.action !== "removed" && user?.email && event) {
+        supabase.functions.invoke("send-transactional-email", {
+          body: {
+            templateName: "rsvp-confirmation",
+            recipientEmail: user.email,
+            idempotencyKey: `rsvp-confirm-${id}-${user.id}-${result.status}`,
+            templateData: {
+              eventTitle: event.title,
+              eventDate: format(new Date(event.starts_at), "EEEE, MMMM d 'at' h:mm a"),
+              eventLocation: event.location || undefined,
+              status: result.status,
+            },
+          },
+        }).catch(() => {});
+      }
     },
     onError: (err: any) => {
       toast({
