@@ -581,7 +581,7 @@ const EventDetail = () => {
               <p className="text-sm font-medium text-foreground">
                 {hostProfile?.full_name || "Host"}
               </p>
-              <p className="label-meta text-muted-foreground">Organizer</p>
+              <p className="label-meta text-muted-foreground">Hosted by {hostProfile?.full_name || "the organizer"}</p>
             </div>
             {isHost && (
               <span className="ml-auto pill-tag bg-sage text-sage-foreground">
