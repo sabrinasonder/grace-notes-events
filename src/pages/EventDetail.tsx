@@ -22,6 +22,7 @@ import {
   ImagePlus,
   Camera,
   Loader2,
+  Download,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
