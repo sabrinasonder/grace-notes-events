@@ -1,5 +1,5 @@
 /// <reference types="google.maps" />
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 
 const GOOGLE_MAPS_API_KEY = "AIzaSyBdR6f7V35-rpYIfMB4SXJqr7NrcjyoIaM";
@@ -40,37 +40,50 @@ interface PlacesAutocompleteProps {
 const PlacesAutocomplete = ({ value, onChange, placeholder, className }: PlacesAutocompleteProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
-  const [ready, setReady] = useState(scriptLoaded);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
-    loadGoogleMapsScript().then(() => setReady(true));
+    let cancelled = false;
+    loadGoogleMapsScript().then(() => {
+      if (cancelled || !inputRef.current || autocompleteRef.current) return;
+
+      const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
+        types: ["establishment", "geocode"],
+        fields: ["formatted_address", "name"],
+      });
+
+      autocomplete.addListener("place_changed", () => {
+        const place = autocomplete.getPlace();
+        const display =
+          place.name && place.formatted_address && !place.formatted_address.startsWith(place.name)
+            ? `${place.name}, ${place.formatted_address}`
+            : place.formatted_address || place.name || "";
+        onChangeRef.current(display);
+      });
+
+      autocompleteRef.current = autocomplete;
+    });
+    return () => { cancelled = true; };
   }, []);
 
+  // Sync React state → DOM when value changes externally
   useEffect(() => {
-    if (!ready || !inputRef.current || autocompleteRef.current) return;
+    if (inputRef.current && inputRef.current.value !== value) {
+      inputRef.current.value = value;
+    }
+  }, [value]);
 
-    const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
-      types: ["establishment", "geocode"],
-      fields: ["formatted_address", "name"],
-    });
-
-    autocomplete.addListener("place_changed", () => {
-      const place = autocomplete.getPlace();
-      const display = place.name && place.formatted_address && !place.formatted_address.startsWith(place.name)
-        ? `${place.name}, ${place.formatted_address}`
-        : place.formatted_address || place.name || "";
-      onChange(display);
-    });
-
-    autocompleteRef.current = autocomplete;
-  }, [ready]);
+  const handleInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange(e.target.value);
+  }, [onChange]);
 
   return (
     <input
       ref={inputRef}
       type="text"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
+      defaultValue={value}
+      onChange={handleInput}
       placeholder={placeholder}
       className={cn(className)}
     />

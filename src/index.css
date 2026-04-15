@@ -94,3 +94,13 @@
     letter-spacing: 0.22em;
   }
 }
+
+/* Google Places Autocomplete dropdown */
+.pac-container {
+  z-index: 9999 !important;
+  border-radius: 12px;
+  border: 1px solid hsl(var(--cream));
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+  font-family: var(--font-body);
+  margin-top: 4px;
+}
