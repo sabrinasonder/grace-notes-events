@@ -49,6 +49,12 @@ export default {
           DEFAULT: "hsl(var(--sage))",
           foreground: "hsl(var(--sage-foreground))",
         },
+        cream: "hsl(var(--cream))",
+        cocoa: "hsl(var(--cocoa))",
+        espresso: "hsl(var(--espresso))",
+        blush: "hsl(var(--blush))",
+        taupe: "hsl(var(--taupe))",
+        paper: "hsl(var(--paper))",
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",
