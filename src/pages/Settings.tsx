@@ -3,12 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Phone, Bell, Check, Loader2, Shield } from "lucide-react";
+import { ArrowLeft, Phone, Bell, Check, Loader2, Shield, LogOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { BottomNav } from "@/components/BottomNav";
 
 const Settings = () => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -279,7 +280,22 @@ const Settings = () => {
             />
           </div>
         </div>
+
+        {/* Sign out */}
+        <div className="space-y-3">
+          <button
+            onClick={async () => {
+              await signOut();
+              navigate("/welcome");
+            }}
+            className="w-full flex items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3.5 transition-colors hover:bg-cream"
+          >
+            <LogOut className="h-4 w-4 text-destructive" strokeWidth={1.5} />
+            <span className="text-sm font-semibold text-destructive">Sign Out</span>
+          </button>
+        </div>
       </div>
+      <BottomNav />
     </div>
   );
 };

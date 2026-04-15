@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { format, isPast } from "date-fns";
 import { ArrowLeft, Heart, Users, Calendar } from "lucide-react";
 import { useFavorites } from "@/hooks/use-favorites";
+import { BottomNav } from "@/components/BottomNav";
 
 const GRADIENTS = [
   "linear-gradient(135deg, #D89B86 0%, #B97A66 60%, #3A2A20 100%)",
@@ -150,6 +151,7 @@ const HeartedEvents = () => {
           )}
         </div>
       </div>
+      <BottomNav />
     </div>
   );
 };
