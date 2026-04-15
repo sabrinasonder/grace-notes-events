@@ -33,13 +33,13 @@ const Archive = () => {
 
       const rsvpEventIds = myRsvps?.map((r) => r.event_id) || [];
 
-      // Get all past events
+      // Get all past events (completed or cancelled)
       const { data: allPast, error } = await supabase
         .from("events")
         .select(
           "*, profiles!events_host_id_fkey(full_name, avatar_url), rsvps(id, status)"
         )
-        .lt("starts_at", new Date().toISOString())
+        .or("starts_at.lt." + new Date().toISOString() + ",status.eq.cancelled")
         .order("starts_at", { ascending: false });
 
       if (error) throw error;
