@@ -338,38 +338,60 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle, onUnreadCountCh
                 )}
 
                 {/* Bubble */}
-                <div
-                  className={cn(
-                    "relative max-w-[85%] rounded-2xl px-4 py-2.5",
-                    isOwn
-                      ? "bg-primary text-primary-foreground"
-                      : "border border-border/50"
+                <div className="flex items-end gap-1">
+                  {/* Reply shortcut — visible on hover (left side for own messages) */}
+                  {isOwn && (
+                    <button
+                      onClick={() => { setReplyTo(msg); }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity flex h-7 w-7 items-center justify-center rounded-full hover:bg-background flex-shrink-0 mb-1"
+                      title="Reply"
+                    >
+                      <Reply className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.5} />
+                    </button>
                   )}
-                  style={!isOwn ? { backgroundColor: "#F4EFE6" } : undefined}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setContextMenu(msg.id);
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {msg.image_url && (
-                    <img src={msg.image_url} alt="" className="rounded-xl max-h-48 w-full object-cover mb-1.5" />
-                  )}
-                  {msg.body && (
-                    <p className={cn("text-sm leading-relaxed whitespace-pre-wrap", isOwn ? "text-primary-foreground" : "text-foreground")}>
-                      {msg.body}
-                    </p>
-                  )}
-                  <p
-                    className="mt-1"
-                    style={{
-                      fontFamily: "var(--font-body)",
-                      fontSize: "10px",
-                      color: isOwn ? "hsl(var(--primary-foreground) / 0.6)" : "hsl(var(--muted-foreground))",
+                  <div
+                    className={cn(
+                      "relative max-w-[85%] rounded-2xl px-4 py-2.5",
+                      isOwn
+                        ? "bg-primary text-primary-foreground"
+                        : "border border-border/50"
+                    )}
+                    style={!isOwn ? { backgroundColor: "#F4EFE6" } : undefined}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setContextMenu(msg.id);
                     }}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    {relativeTime(msg.created_at)}
-                  </p>
+                    {msg.image_url && (
+                      <img src={msg.image_url} alt="" className="rounded-xl max-h-48 w-full object-cover mb-1.5" />
+                    )}
+                    {msg.body && (
+                      <p className={cn("text-sm leading-relaxed whitespace-pre-wrap", isOwn ? "text-primary-foreground" : "text-foreground")}>
+                        {msg.body}
+                      </p>
+                    )}
+                    <p
+                      className="mt-1"
+                      style={{
+                        fontFamily: "var(--font-body)",
+                        fontSize: "10px",
+                        color: isOwn ? "hsl(var(--primary-foreground) / 0.6)" : "hsl(var(--muted-foreground))",
+                      }}
+                    >
+                      {relativeTime(msg.created_at)}
+                    </p>
+                  </div>
+                  {/* Reply shortcut — visible on hover (right side for others' messages) */}
+                  {!isOwn && (
+                    <button
+                      onClick={() => { setReplyTo(msg); }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity flex h-7 w-7 items-center justify-center rounded-full hover:bg-background flex-shrink-0 mb-1"
+                      title="Reply"
+                    >
+                      <Reply className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.5} />
+                    </button>
+                  )}
                 </div>
 
                 {/* Context actions */}

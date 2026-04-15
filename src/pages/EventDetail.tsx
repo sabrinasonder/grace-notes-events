@@ -34,6 +34,8 @@ import {
   Globe,
   UserPlus,
   Search,
+  CalendarPlus,
+  ExternalLink,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -778,10 +780,16 @@ const EventDetail = () => {
               <span>{format(new Date(event.starts_at), "h:mm a")}</span>
             </div>
             {event.location && (
-              <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
-                <MapPin className="h-4 w-4" strokeWidth={1.5} />
-                <span>{event.location}</span>
-              </div>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2.5 text-sm text-muted-foreground hover:text-foreground transition-colors group/loc"
+              >
+                <MapPin className="h-4 w-4 flex-shrink-0" strokeWidth={1.5} />
+                <span className="underline decoration-border underline-offset-2 group-hover/loc:decoration-foreground">{event.location}</span>
+                <ExternalLink className="h-3 w-3 opacity-0 group-hover/loc:opacity-100 transition-opacity flex-shrink-0" strokeWidth={1.5} />
+              </a>
             )}
             <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
               <Users className="h-4 w-4" strokeWidth={1.5} />
@@ -791,6 +799,42 @@ const EventDetail = () => {
               </span>
             </div>
           </div>
+
+          {/* Add to Calendar — only for guests who are going */}
+          {myRsvp?.status === "going" && (
+            <button
+              onClick={() => {
+                const start = new Date(event.starts_at);
+                const end = new Date(start.getTime() + 2 * 60 * 60 * 1000); // default 2h duration
+                const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+                const ics = [
+                  "BEGIN:VCALENDAR",
+                  "VERSION:2.0",
+                  "PRODID:-//Sonder Circle//EN",
+                  "BEGIN:VEVENT",
+                  `DTSTART:${fmt(start)}`,
+                  `DTEND:${fmt(end)}`,
+                  `SUMMARY:${event.title}`,
+                  event.location ? `LOCATION:${event.location}` : "",
+                  event.description ? `DESCRIPTION:${event.description.replace(/\n/g, "\\n").substring(0, 500)}` : "",
+                  `URL:${window.location.href}`,
+                  "END:VEVENT",
+                  "END:VCALENDAR",
+                ].filter(Boolean).join("\r\n");
+                const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${event.title.replace(/[^a-zA-Z0-9]/g, "_")}.ics`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 transition-colors hover:bg-background"
+            >
+              <CalendarPlus className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+              <span className="text-sm text-muted-foreground">Add to Calendar</span>
+            </button>
+          )}
 
           {/* Host row */}
           <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3">
