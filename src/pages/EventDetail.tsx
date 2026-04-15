@@ -335,7 +335,7 @@ const EventDetail = () => {
   const tabs: { key: TabKey; label: string }[] = [
     { key: "about", label: "About" },
     { key: "guests", label: `Guests (${goingRsvps.length})` },
-    { key: "chat", label: "Chat" },
+    ...(canChat ? [{ key: "chat" as TabKey, label: "Chat" }] : []),
     { key: "updates", label: `Updates (${updates.length})` },
   ];
 
@@ -636,13 +636,13 @@ const EventDetail = () => {
 
         {tab === "updates" && (
           <div className="space-y-4">
-            {/* Composer — host or attending guests */}
-            {(isHost || myRsvp?.status === "going") && (
+            {/* Host-only composer */}
+            {isHost && (
               <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
                 <textarea
                   value={updateBody}
                   onChange={(e) => setUpdateBody(e.target.value)}
-                  placeholder={isHost ? "Share an update with your guests…" : "Share a comment…"}
+                  placeholder="Share an update with your guests…"
                   rows={3}
                   className="w-full resize-none rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
@@ -694,7 +694,7 @@ const EventDetail = () => {
               </div>
             )}
 
-            {updates.length === 0 && !isHost && myRsvp?.status !== "going" ? (
+            {updates.length === 0 && !isHost ? (
               <p className="text-sm text-muted-foreground text-center py-6">
                 No updates yet.
               </p>

@@ -46,12 +46,29 @@ export const EventChat = ({ eventId, userId, isHost, eventTitle }: EventChatProp
     queryFn: async () => {
       const { data, error } = await supabase
         .from("messages")
-        .select("*, profiles!messages_sender_id_fkey(full_name, avatar_url), replied:messages!messages_reply_to_id_fkey(body, profiles!messages_sender_id_fkey(full_name))")
+        .select("*, profiles!messages_sender_id_fkey(full_name, avatar_url)")
         .eq("event_id", eventId)
         .is("deleted_at", null)
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return data || [];
+
+      // Fetch replied messages separately
+      const replyIds = (data || []).filter((m: any) => m.reply_to_id).map((m: any) => m.reply_to_id);
+      let repliedMap: Record<string, any> = {};
+      if (replyIds.length > 0) {
+        const { data: replies } = await supabase
+          .from("messages")
+          .select("id, body, profiles!messages_sender_id_fkey(full_name)")
+          .in("id", replyIds);
+        if (replies) {
+          for (const r of replies) repliedMap[r.id] = r;
+        }
+      }
+
+      return (data || []).map((m: any) => ({
+        ...m,
+        replied: m.reply_to_id ? repliedMap[m.reply_to_id] || null : null,
+      }));
     },
   });
 
