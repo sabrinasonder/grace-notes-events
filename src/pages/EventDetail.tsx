@@ -51,17 +51,6 @@ const EventDetail = () => {
   const [showCheckout, setShowCheckout] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  // Keyboard navigation for lightbox
-  useEffect(() => {
-    if (lightboxIndex === null) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") setLightboxIndex((i) => (i !== null && i > 0 ? i - 1 : i));
-      if (e.key === "ArrowRight") setLightboxIndex((i) => (i !== null && photos && i < photos.length - 1 ? i + 1 : i));
-      if (e.key === "Escape") setLightboxIndex(null);
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [lightboxIndex, photos]);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["event", id],
