@@ -27,7 +27,7 @@ const PaymentReceiptEmail = ({
         <Hr style={divider} />
         <Heading style={h1}>Payment confirmed</Heading>
         <Text style={text}>
-          Your payment of <strong>{amount}</strong> for <strong>{eventTitle}</strong> has been received. You're all set!
+          Your payment of <strong>{amount}</strong> for <strong>{eventTitle}</strong> has been received. You are all set!
         </Text>
         {eventDate && <Text style={detail}>📅 {eventDate}</Text>}
         <Hr style={receiptDivider} />
