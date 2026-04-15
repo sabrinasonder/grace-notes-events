@@ -661,7 +661,11 @@ const EventDetail = () => {
             ) : (
               <div className="grid grid-cols-2 gap-2">
                 {photos.map((photo: any) => (
-                  <div key={photo.id} className="relative rounded-xl overflow-hidden aspect-square">
+                  <div
+                    key={photo.id}
+                    className="relative rounded-xl overflow-hidden aspect-square cursor-pointer"
+                    onDoubleClick={() => setLightboxUrl(photo.image_url)}
+                  >
                     <img
                       src={photo.image_url}
                       alt=""
