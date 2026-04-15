@@ -22,20 +22,20 @@ const RsvpConfirmationEmail = ({
 }: RsvpConfirmationProps) => (
   <Html lang="en" dir="ltr">
     <Head />
-    <Preview>You're {status} to {eventTitle}</Preview>
+    <Preview>You are {status} to {eventTitle}</Preview>
     <Body style={main}>
       <Container style={container}>
         <Text style={brand}>{SITE_NAME}</Text>
         <Hr style={divider} />
         <Heading style={h1}>
-          {status === 'going' ? 'You're in!' : status === 'maybe' ? 'Noted — maybe!' : 'We'll miss you'}
+          {status === 'going' ? "You're in!" : status === 'maybe' ? 'Noted — maybe!' : "We'll miss you"}
         </Heading>
         <Text style={text}>
           {status === 'going'
-            ? `You've confirmed your spot for **${eventTitle}**. We can't wait to see you.`
+            ? `You've confirmed your spot for ${eventTitle}. We can't wait to see you.`
             : status === 'maybe'
-            ? `You've marked yourself as maybe for **${eventTitle}**. We hope you can make it!`
-            : `You've declined the invitation to **${eventTitle}**. Maybe next time!`}
+            ? `You've marked yourself as maybe for ${eventTitle}. We hope you can make it!`
+            : `You've declined the invitation to ${eventTitle}. Maybe next time!`}
         </Text>
         {eventDate && <Text style={detail}>📅 {eventDate}</Text>}
         {eventLocation && <Text style={detail}>📍 {eventLocation}</Text>}
