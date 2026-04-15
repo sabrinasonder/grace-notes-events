@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import PlacesAutocomplete from "@/components/PlacesAutocomplete";
 import type { Database } from "@/integrations/supabase/types";
 
 type EventPrivacy = Database["public"]["Enums"]["event_privacy"];
@@ -327,10 +328,9 @@ const CreateEvent = () => {
         {/* Location */}
         <div className="space-y-2">
           <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">Location</label>
-          <input
-            type="text"
+          <PlacesAutocomplete
             value={location}
-            onChange={(e) => setLocation(e.target.value)}
+            onChange={setLocation}
             placeholder="e.g. The Loft, 123 Main St"
             className="w-full rounded-xl border border-cream bg-paper px-4 py-3.5 text-sm font-sans text-espresso placeholder:text-taupe/40 focus:border-cocoa focus:outline-none focus:ring-1 focus:ring-cocoa transition-colors"
           />
