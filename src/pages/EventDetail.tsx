@@ -32,6 +32,8 @@ import {
   Lock,
   UserCheck,
   Globe,
+  UserPlus,
+  Search,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -61,7 +63,8 @@ const EventDetail = () => {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [requestMessage, setRequestMessage] = useState("");
-
+  const [showInviteMembers, setShowInviteMembers] = useState(false);
+  const [inviteSearch, setInviteSearch] = useState("");
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["event", id],
