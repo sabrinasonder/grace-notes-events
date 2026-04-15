@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { type StripeEnv, createStripeClient } from "../_shared/stripe.ts";
 
 serve(async (req: Request) => {
   if (req.method !== "POST") {
@@ -8,7 +9,7 @@ serve(async (req: Request) => {
 
   try {
     const url = new URL(req.url);
-    const env = (url.searchParams.get("env") as "sandbox" | "live") || "sandbox";
+    const env = (url.searchParams.get("env") as StripeEnv) || "sandbox";
 
     const webhookSecretKey = env === "live"
       ? "PAYMENTS_LIVE_WEBHOOK_SECRET"
@@ -20,7 +21,6 @@ serve(async (req: Request) => {
       return new Response("Webhook secret not configured", { status: 500 });
     }
 
-    // Get raw body and signature
     const body = await req.text();
     const signature = req.headers.get("stripe-signature");
 
@@ -28,9 +28,15 @@ serve(async (req: Request) => {
       return new Response("Missing signature", { status: 400 });
     }
 
-    // Parse the event (simplified verification — in production use Stripe's SDK)
-    // The webhook secret is registered with Stripe, so the signature is valid
-    const event = JSON.parse(body);
+    // Verify webhook signature using Stripe SDK
+    const stripe = createStripeClient(env);
+    let event: any;
+    try {
+      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
+    } catch (err) {
+      console.error("Webhook signature verification failed:", err);
+      return new Response("Invalid signature", { status: 400 });
+    }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

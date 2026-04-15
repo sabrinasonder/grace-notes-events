@@ -1,42 +1,36 @@
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/stripe/v1";
+// supabase/functions/_shared/stripe.ts
+import { encode } from "https://deno.land/std@0.168.0/encoding/hex.ts";
 
-export function getStripeHeaders(env: "sandbox" | "live" = "sandbox") {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+export type StripeEnv = 'sandbox' | 'live';
 
-  const keyName = env === "live" ? "STRIPE_LIVE_API_KEY" : "STRIPE_SANDBOX_API_KEY";
-  const STRIPE_API_KEY = Deno.env.get(keyName);
-  if (!STRIPE_API_KEY) throw new Error(`${keyName} is not configured`);
-
-  return {
-    Authorization: `Bearer ${LOVABLE_API_KEY}`,
-    "X-Connection-Api-Key": STRIPE_API_KEY,
-  };
+export function getConnectionApiKey(env: StripeEnv): string {
+  const key = env === 'sandbox'
+    ? Deno.env.get('STRIPE_SANDBOX_API_KEY')
+    : Deno.env.get('STRIPE_LIVE_API_KEY');
+  if (!key) throw new Error(`STRIPE_${env.toUpperCase()}_API_KEY is not configured`);
+  return key;
 }
 
-export async function stripeRequest(
-  path: string,
-  options: {
-    method?: string;
-    body?: Record<string, string>;
-    env?: "sandbox" | "live";
-  } = {}
-) {
-  const { method = "POST", body, env = "sandbox" } = options;
-  const headers: Record<string, string> = {
-    ...getStripeHeaders(env),
-    "Content-Type": "application/x-www-form-urlencoded",
-  };
+import Stripe from "https://esm.sh/stripe@18.5.0";
 
-  const response = await fetch(`${GATEWAY_URL}${path}`, {
-    method,
-    headers,
-    body: body ? new URLSearchParams(body).toString() : undefined,
+const GATEWAY_STRIPE_BASE = 'https://connector-gateway.lovable.dev/stripe';
+
+export function createStripeClient(env: StripeEnv): Stripe {
+  const connectionApiKey = getConnectionApiKey(env);
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!lovableApiKey) throw new Error('LOVABLE_API_KEY is not configured');
+
+  return new Stripe(connectionApiKey, {
+    httpClient: Stripe.createFetchHttpClient((url: string | URL, init?: RequestInit) => {
+      const gatewayUrl = url.toString().replace('https://api.stripe.com', GATEWAY_STRIPE_BASE);
+      return fetch(gatewayUrl, {
+        ...init,
+        headers: {
+          ...Object.fromEntries(new Headers(init?.headers).entries()),
+          'X-Connection-Api-Key': connectionApiKey,
+          'Lovable-API-Key': lovableApiKey,
+        },
+      });
+    }),
   });
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(`Stripe API error [${response.status}]: ${JSON.stringify(data)}`);
-  }
-  return data;
 }
