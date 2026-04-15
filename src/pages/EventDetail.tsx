@@ -671,10 +671,20 @@ const EventDetail = () => {
                       alt=""
                       className="h-full w-full object-cover"
                     />
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent p-2">
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent p-2 flex items-end justify-between">
                       <span className="text-[10px] text-white/80">
                         {photo.profiles?.full_name || "Member"}
                       </span>
+                      <a
+                        href={photo.image_url}
+                        download
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-1 rounded-full bg-black/40 text-white/90 hover:bg-black/60 transition-colors"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </a>
                     </div>
                   </div>
                 ))}
