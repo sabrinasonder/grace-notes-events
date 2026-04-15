@@ -131,7 +131,7 @@ const CreateEvent = () => {
 
       if (editId) {
         // Update existing event
-        const updatePayload: Record<string, any> = {
+        const updatePayload = {
           title,
           description: description || null,
           starts_at: startsAt.toISOString(),
@@ -139,12 +139,8 @@ const CreateEvent = () => {
           capacity: capacity ? parseInt(capacity) : null,
           price_cents: priceCents,
           auto_reminders_enabled: autoReminders,
+          ...(coverUrl !== undefined ? { cover_image_url: coverUrl } : {}),
         };
-
-        // Only update cover if a new one was uploaded
-        if (coverUrl !== undefined) {
-          updatePayload.cover_image_url = coverUrl;
-        }
 
         const { error } = await supabase
           .from("events")
