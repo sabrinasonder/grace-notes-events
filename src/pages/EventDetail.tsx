@@ -801,40 +801,59 @@ const EventDetail = () => {
           </div>
 
           {/* Add to Calendar — only for guests who are going */}
-          {myRsvp?.status === "going" && (
-            <button
-              onClick={() => {
-                const start = new Date(event.starts_at);
-                const end = new Date(start.getTime() + 2 * 60 * 60 * 1000); // default 2h duration
-                const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-                const ics = [
-                  "BEGIN:VCALENDAR",
-                  "VERSION:2.0",
-                  "PRODID:-//Sonder Circle//EN",
-                  "BEGIN:VEVENT",
-                  `DTSTART:${fmt(start)}`,
-                  `DTEND:${fmt(end)}`,
-                  `SUMMARY:${event.title}`,
-                  event.location ? `LOCATION:${event.location}` : "",
-                  event.description ? `DESCRIPTION:${event.description.replace(/\n/g, "\\n").substring(0, 500)}` : "",
-                  `URL:${window.location.href}`,
-                  "END:VEVENT",
-                  "END:VCALENDAR",
-                ].filter(Boolean).join("\r\n");
-                const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `${event.title.replace(/[^a-zA-Z0-9]/g, "_")}.ics`;
-                a.click();
-                URL.revokeObjectURL(url);
-              }}
-              className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 transition-colors hover:bg-background"
-            >
-              <CalendarPlus className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-              <span className="text-sm text-muted-foreground">Add to Calendar</span>
-            </button>
-          )}
+          {myRsvp?.status === "going" && (() => {
+            const start = new Date(event.starts_at);
+            const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+            const fmtIcs = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+            const fmtGoogle = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z/, "Z");
+
+            const downloadIcs = () => {
+              const ics = [
+                "BEGIN:VCALENDAR",
+                "VERSION:2.0",
+                "PRODID:-//Sonder Circle//EN",
+                "BEGIN:VEVENT",
+                `DTSTART:${fmtIcs(start)}`,
+                `DTEND:${fmtIcs(end)}`,
+                `SUMMARY:${event.title}`,
+                event.location ? `LOCATION:${event.location}` : "",
+                event.description ? `DESCRIPTION:${event.description.replace(/\n/g, "\\n").substring(0, 500)}` : "",
+                `URL:${window.location.href}`,
+                "END:VEVENT",
+                "END:VCALENDAR",
+              ].filter(Boolean).join("\r\n");
+              const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `${event.title.replace(/[^a-zA-Z0-9]/g, "_")}.ics`;
+              a.click();
+              URL.revokeObjectURL(url);
+            };
+
+            const googleUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(event.title)}&dates=${fmtGoogle(start)}/${fmtGoogle(end)}${event.location ? `&location=${encodeURIComponent(event.location)}` : ""}${event.description ? `&details=${encodeURIComponent(event.description.substring(0, 500))}` : ""}`;
+
+            return (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={downloadIcs}
+                  className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 transition-colors hover:bg-background"
+                >
+                  <CalendarPlus className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                  <span className="text-sm text-muted-foreground">Add to Calendar</span>
+                </button>
+                <a
+                  href={googleUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 transition-colors hover:bg-background"
+                >
+                  <CalendarPlus className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+                  <span className="text-sm text-muted-foreground">Google Calendar</span>
+                </a>
+              </div>
+            );
+          })()}
 
           {/* Host row */}
           <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3">
