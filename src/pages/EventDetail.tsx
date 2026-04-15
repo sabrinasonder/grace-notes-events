@@ -206,11 +206,41 @@ const EventDetail = () => {
       });
       if (error) throw error;
       if (!data) throw new Error("Could not approve request");
+      return requestId;
     },
-    onSuccess: () => {
+    onSuccess: async (requestId) => {
       queryClient.invalidateQueries({ queryKey: ["rsvp_requests", id] });
       queryClient.invalidateQueries({ queryKey: ["rsvps", id] });
       toast({ title: "Request approved" });
+
+      // Send approval notification email (fire-and-forget)
+      if (event) {
+        const req = rsvpRequests.find((r: any) => r.id === requestId);
+        if (req) {
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("email")
+            .eq("id", req.user_id)
+            .maybeSingle();
+
+          if (profileData?.email) {
+            const hostName = (event.profiles as any)?.full_name || "The host";
+            supabase.functions.invoke("send-transactional-email", {
+              body: {
+                templateName: "join-request-approved",
+                recipientEmail: profileData.email,
+                idempotencyKey: `join-approved-${requestId}`,
+                templateData: {
+                  eventTitle: event.title,
+                  eventDate: format(new Date(event.starts_at), "EEEE, MMMM d 'at' h:mm a"),
+                  hostName,
+                  eventUrl: `${window.location.origin}/event/${id}`,
+                },
+              },
+            }).catch(() => {});
+          }
+        }
+      }
     },
     onError: (err: any) => {
       toast({ title: "Approval failed", description: err.message, variant: "destructive" });
