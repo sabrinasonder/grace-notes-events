@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/auth";
 import Index from "./pages/Index.tsx";
 import Welcome from "./pages/Welcome.tsx";
+import CreateEvent from "./pages/CreateEvent.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -20,6 +21,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/welcome" element={<Welcome />} />
+            <Route path="/create" element={<CreateEvent />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
