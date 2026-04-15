@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { format } from "date-fns";
-import { Plus, Calendar, MapPin, Users } from "lucide-react";
+import { Plus, Calendar, MapPin, Users, Archive } from "lucide-react";
 
 type FilterTab = "all" | "hosting" | "attending";
 
@@ -238,6 +238,12 @@ const Index = () => {
             {user.email}
           </p>
           <div className="flex gap-2">
+            <button
+              onClick={() => navigate("/archive")}
+              className="pill-tag border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Archive
+            </button>
             <button
               onClick={() => navigate("/settings")}
               className="pill-tag border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
