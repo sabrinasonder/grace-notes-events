@@ -110,7 +110,18 @@ const EventDetail = () => {
     enabled: !!id && !!user,
   });
 
-  // Current user's RSVP
+  // Keyboard navigation for lightbox
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") setLightboxIndex((i) => (i !== null && i > 0 ? i - 1 : i));
+      if (e.key === "ArrowRight") setLightboxIndex((i) => (i !== null && i < photos.length - 1 ? i + 1 : i));
+      if (e.key === "Escape") setLightboxIndex(null);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [lightboxIndex, photos]);
+
   const myRsvp = rsvps.find((r: any) => r.user_id === user?.id);
 
   // Post an update (host only)
