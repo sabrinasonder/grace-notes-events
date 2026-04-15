@@ -3,7 +3,7 @@ import { useAuth } from "@/lib/auth";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { ArrowLeft, CalendarIcon, Home, ImagePlus } from "lucide-react";
+import { ArrowLeft, CalendarIcon, Home, ImagePlus, Lock, UserCheck, Globe } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -12,6 +12,15 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import type { Database } from "@/integrations/supabase/types";
+
+type EventPrivacy = Database["public"]["Enums"]["event_privacy"];
+
+const PRIVACY_OPTIONS: { value: EventPrivacy; label: string; desc: string; icon: typeof Lock }[] = [
+  { value: "invite_only", label: "Invite Only", desc: "Only people you invite can see & join", icon: Lock },
+  { value: "request_to_join", label: "Request to Join", desc: "Members can request — you approve", icon: UserCheck },
+  { value: "open", label: "Open", desc: "Any member can see & RSVP", icon: Globe },
+];
 
 const CreateEvent = () => {
   const { user, loading } = useAuth();
@@ -28,6 +37,7 @@ const CreateEvent = () => {
   const [capacity, setCapacity] = useState("");
   const [priceDollars, setPriceDollars] = useState("");
   const [autoReminders, setAutoReminders] = useState(true);
+  const [privacy, setPrivacy] = useState<EventPrivacy>("invite_only");
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -63,6 +73,7 @@ const CreateEvent = () => {
       setCapacity(data.capacity ? String(data.capacity) : "");
       setPriceDollars(data.price_cents ? (data.price_cents / 100).toFixed(2) : "");
       setAutoReminders(data.auto_reminders_enabled);
+      setPrivacy(data.privacy);
 
       const startsAt = new Date(data.starts_at);
       setDate(startsAt);
@@ -139,6 +150,7 @@ const CreateEvent = () => {
           capacity: capacity ? parseInt(capacity) : null,
           price_cents: priceCents,
           auto_reminders_enabled: autoReminders,
+          privacy,
           ...(coverUrl !== undefined ? { cover_image_url: coverUrl } : {}),
         };
 
@@ -165,6 +177,7 @@ const CreateEvent = () => {
             capacity: capacity ? parseInt(capacity) : null,
             price_cents: priceCents,
             auto_reminders_enabled: autoReminders,
+            privacy,
           })
           .select("id")
           .single();
@@ -273,6 +286,61 @@ const CreateEvent = () => {
             placeholder="What's this gathering about?"
             className="w-full rounded-2xl border border-border bg-card px-4 py-3 font-body text-sm text-foreground placeholder:text-muted-foreground/40 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-colors resize-none"
           />
+        </div>
+
+        {/* Privacy selector */}
+        <div className="space-y-2">
+          <label className="label-meta text-muted-foreground">Privacy</label>
+          <div className="space-y-2">
+            {PRIVACY_OPTIONS.map((opt) => {
+              const Icon = opt.icon;
+              const selected = privacy === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setPrivacy(opt.value)}
+                  className={cn(
+                    "w-full flex items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all",
+                    selected
+                      ? "border-primary bg-primary/5"
+                      : "border-border bg-card hover:border-muted-foreground/30"
+                  )}
+                >
+                  <Icon
+                    className={cn(
+                      "h-4 w-4 shrink-0",
+                      selected ? "text-primary" : "text-muted-foreground"
+                    )}
+                    strokeWidth={1.5}
+                  />
+                  <div className="min-w-0">
+                    <p className={cn(
+                      "text-sm font-medium",
+                      selected ? "text-foreground" : "text-foreground/80"
+                    )}>
+                      {opt.label}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{opt.desc}</p>
+                  </div>
+                  <div
+                    className={cn(
+                      "ml-auto h-4 w-4 shrink-0 rounded-full border-2 transition-colors",
+                      selected
+                        ? "border-primary bg-primary"
+                        : "border-muted-foreground/40"
+                    )}
+                  >
+                    {selected && (
+                      <div className="h-full w-full flex items-center justify-center">
+                        <div className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Date + Time */}
