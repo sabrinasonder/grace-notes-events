@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,300;1,9..144,400;1,9..144,500&family=Manrope:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=Manrope:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -9,20 +9,20 @@
     --background: 37 60% 96%;
     --foreground: 18 25% 10%;
 
-    --card: 34 33% 93%;
+    --card: 0 0% 100%;
     --card-foreground: 18 25% 10%;
 
     --popover: 37 60% 96%;
     --popover-foreground: 18 25% 10%;
 
-    --primary: 18 27% 18%;
+    --primary: 23 30% 18%;
     --primary-foreground: 37 60% 96%;
 
-    --secondary: 34 33% 93%;
+    --secondary: 37 42% 93%;
     --secondary-foreground: 18 25% 10%;
 
-    --muted: 34 33% 93%;
-    --muted-foreground: 25 18% 60%;
+    --muted: 37 42% 93%;
+    --muted-foreground: 28 15% 59%;
 
     --accent: 15 50% 68%;
     --accent-foreground: 18 25% 10%;
@@ -33,20 +33,27 @@
     --sage: 92 11% 49%;
     --sage-foreground: 37 60% 96%;
 
+    --cream: 37 42% 93%;
+    --cocoa: 23 30% 18%;
+    --espresso: 18 27% 10%;
+    --blush: 15 50% 68%;
+    --taupe: 28 15% 59%;
+    --paper: 0 0% 100%;
+
     --border: 30 20% 86%;
     --input: 30 20% 86%;
-    --ring: 18 27% 18%;
+    --ring: 23 30% 18%;
 
     --radius: 1.5rem;
 
-    --sidebar-background: 34 33% 93%;
+    --sidebar-background: 37 42% 93%;
     --sidebar-foreground: 18 25% 10%;
-    --sidebar-primary: 18 27% 18%;
+    --sidebar-primary: 23 30% 18%;
     --sidebar-primary-foreground: 37 60% 96%;
-    --sidebar-accent: 34 33% 93%;
+    --sidebar-accent: 37 42% 93%;
     --sidebar-accent-foreground: 18 25% 10%;
     --sidebar-border: 30 20% 86%;
-    --sidebar-ring: 18 27% 18%;
+    --sidebar-ring: 23 30% 18%;
 
     --font-display: 'Fraunces', serif;
     --font-body: 'Manrope', sans-serif;
