@@ -237,12 +237,20 @@ const Index = () => {
           <p className="text-xs text-muted-foreground truncate">
             {user.email}
           </p>
-          <button
-            onClick={signOut}
-            className="pill-tag border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Sign out
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => navigate("/settings")}
+              className="pill-tag border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Settings
+            </button>
+            <button
+              onClick={signOut}
+              className="pill-tag border border-border bg-background text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </div>
     </div>
