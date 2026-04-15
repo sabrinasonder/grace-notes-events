@@ -107,6 +107,8 @@ export type Database = {
           event_id: string
           id: string
           image_url: string
+          message_id: string | null
+          source: string
           uploaded_by: string
         }
         Insert: {
@@ -114,6 +116,8 @@ export type Database = {
           event_id: string
           id?: string
           image_url: string
+          message_id?: string | null
+          source?: string
           uploaded_by: string
         }
         Update: {
@@ -121,6 +125,8 @@ export type Database = {
           event_id?: string
           id?: string
           image_url?: string
+          message_id?: string | null
+          source?: string
           uploaded_by?: string
         }
         Relationships: [
@@ -129,6 +135,13 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_photos_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
             referencedColumns: ["id"]
           },
           {
@@ -193,6 +206,138 @@ export type Database = {
           },
         ]
       }
+      message_reads: {
+        Row: {
+          id: string
+          message_id: string
+          read_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          message_id: string
+          read_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          message_id?: string
+          read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_reads_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          body: string
+          created_at: string
+          deleted_at: string | null
+          event_id: string
+          id: string
+          image_url: string | null
+          reply_to_id: string | null
+          sender_id: string
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          event_id: string
+          id?: string
+          image_url?: string | null
+          reply_to_id?: string | null
+          sender_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          event_id?: string
+          id?: string
+          image_url?: string | null
+          reply_to_id?: string | null
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_reply_to_id_fkey"
+            columns: ["reply_to_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_preferences: {
+        Row: {
+          created_at: string
+          email_reminders: boolean
+          host_announcements_email: boolean
+          host_announcements_sms: boolean
+          id: string
+          sms_reminders: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email_reminders?: boolean
+          host_announcements_email?: boolean
+          host_announcements_sms?: boolean
+          id?: string
+          sms_reminders?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email_reminders?: boolean
+          host_announcements_email?: boolean
+          host_announcements_sms?: boolean
+          id?: string
+          sms_reminders?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount_cents: number
@@ -249,6 +394,8 @@ export type Database = {
           email: string | null
           full_name: string | null
           id: string
+          phone: string | null
+          phone_verified: boolean
           updated_at: string
         }
         Insert: {
@@ -258,6 +405,8 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id: string
+          phone?: string | null
+          phone_verified?: boolean
           updated_at?: string
         }
         Update: {
@@ -267,6 +416,8 @@ export type Database = {
           email?: string | null
           full_name?: string | null
           id?: string
+          phone?: string | null
+          phone_verified?: boolean
           updated_at?: string
         }
         Relationships: []
@@ -340,6 +491,39 @@ export type Database = {
         }
         Relationships: []
       }
+      typing_indicators: {
+        Row: {
+          event_id: string
+          last_typed_at: string
+          user_id: string
+        }
+        Insert: {
+          event_id: string
+          last_typed_at?: string
+          user_id: string
+        }
+        Update: {
+          event_id?: string
+          last_typed_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "typing_indicators_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "typing_indicators_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       updates: {
         Row: {
           author_id: string
@@ -387,6 +571,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_access_event_chat: {
+        Args: { _event_id: string; _user_id: string }
+        Returns: boolean
+      }
       delete_email: {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
