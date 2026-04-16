@@ -48,7 +48,7 @@ const SearchEvents = () => {
           "*, profiles!events_host_id_fkey(full_name, avatar_url), rsvps(id, status), event_hosts(user_id, profiles!event_hosts_user_id_fkey(full_name, avatar_url))"
         )
         .gte("starts_at", new Date().toISOString())
-        .eq("status", "active")
+        .or("status.eq.active,status.is.null")
         .order("starts_at", { ascending: true });
       if (error) throw error;
       return data || [];
