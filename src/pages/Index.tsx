@@ -2,9 +2,11 @@ import { useAuth } from "@/lib/auth";
 import { Navigate, useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { format, isToday, addDays, isBefore } from "date-fns";
-import { Calendar, Users, Heart, Sparkles } from "lucide-react";
+import { Calendar, Users, Heart, Sparkles, Share2, UserCheck, Lock, Repeat } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useFavorites } from "@/hooks/use-favorites";
 import { BottomNav } from "@/components/BottomNav";
 
@@ -31,12 +33,53 @@ function getGreeting() {
 }
 
 const Index = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, membershipStatus } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mode, setMode] = useState<FilterMode>("going");
+  const [requestingId, setRequestingId] = useState<string | null>(null);
+  const hasSetInitialMode = useRef(false);
   const { favorites, isFavorited, toggleFavorite } = useFavorites();
+  const queryClient = useQueryClient();
   const heartedScrollRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+
+  const requestAccessMutation = useMutation({
+    mutationFn: async (eventId: string) => {
+      const { error } = await supabase.from("rsvp_requests").insert({
+        event_id: eventId,
+        user_id: user!.id,
+        message: null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-rsvp-requests", user?.id] });
+      toast({ title: "Request sent!", description: "The host will review your request." });
+      setRequestingId(null);
+    },
+    onError: (err: any) => {
+      toast({ title: "Request failed", description: err.message, variant: "destructive" });
+      setRequestingId(null);
+    },
+  });
+
+  const handleShare = async (e: React.MouseEvent, event: any) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/event/${event.id}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: event.title, text: `Join me at ${event.title}`, url });
+      } catch {}
+    } else {
+      try {
+        await navigator.clipboard.writeText(url);
+        toast({ title: "Link copied!" });
+      } catch {
+        toast({ title: "Could not copy link", variant: "destructive" });
+      }
+    }
+  };
 
   // Profile
   const { data: profile } = useQuery({
@@ -97,6 +140,19 @@ const Index = () => {
     enabled: !!user && favorites.length > 0,
   });
 
+  // My own rsvp requests (to know which events I already requested)
+  const { data: myRequests = [] } = useQuery({
+    queryKey: ["my-rsvp-requests", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("rsvp_requests")
+        .select("event_id, status")
+        .eq("user_id", user!.id);
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
   // Pending RSVP requests for events I host
   const { data: pendingRequests = [] } = useQuery({
     queryKey: ["pending-rsvp-requests", user?.id],
@@ -109,6 +165,14 @@ const Index = () => {
     },
     enabled: !!user,
   });
+
+  // Default hosts to "Hosting" mode on first load
+  useEffect(() => {
+    if (eventsLoading || hasSetInitialMode.current || !user) return;
+    hasSetInitialMode.current = true;
+    const isHostingAny = events.some((e: any) => e.host_id === user.id);
+    if (isHostingAny) setMode("hosting");
+  }, [eventsLoading, events, user]);
 
   const myRsvpEventIds = useMemo(() => new Set(myRsvps.map((r) => r.event_id)), [myRsvps]);
 
@@ -142,7 +206,7 @@ const Index = () => {
     );
   }
 
-  if (!user) return <Navigate to="/welcome" replace />;
+  if (!user) return <Navigate to="/join" replace />;
 
   const firstName = profile?.full_name?.split(" ")[0] || "there";
 
@@ -151,6 +215,11 @@ const Index = () => {
     const hostProfile = event.profiles;
     const eventDate = new Date(event.starts_at);
     const isHost = event.host_id === user?.id;
+    const hasRsvp = myRsvpEventIds.has(event.id);
+    const isRestricted = event.privacy === "request_to_join" || event.privacy === "invite_only";
+    const myReq = myRequests.find((r: any) => r.event_id === event.id);
+    const alreadyRequested = !!myReq;
+    const showRequestPill = isRestricted && !isHost && !hasRsvp;
 
     return (
       <button
@@ -168,29 +237,65 @@ const Index = () => {
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
 
           {/* Top-left pills */}
-          <div className="absolute top-4 left-4 flex gap-2">
+          <div className="absolute top-4 left-4 flex gap-2 flex-wrap max-w-[65%]">
             <span className="rounded-full bg-cocoa px-2.5 py-1 font-sans text-[9px] font-semibold uppercase tracking-[0.2em] text-background">
               {event.price_cents > 0 ? `$${(event.price_cents / 100).toFixed(0)}` : "Free"}
             </span>
+            {(event.parent_event_id || event.is_recurring_parent) && (
+              <span className="flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 font-sans text-[9px] font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm">
+                <Repeat className="h-2.5 w-2.5" strokeWidth={2} />
+                Recurring
+              </span>
+            )}
             {isHost && (
               <span className="rounded-full bg-blush px-2.5 py-1 font-sans text-[9px] font-semibold uppercase tracking-[0.2em] text-white">
                 You're hosting
               </span>
             )}
+            {showRequestPill && (
+              alreadyRequested ? (
+                <span className="rounded-full bg-white/90 px-2.5 py-1 font-sans text-[9px] font-semibold uppercase tracking-[0.2em] text-taupe">
+                  {myReq.status === "pending" ? "Pending" : myReq.status === "declined" ? "Declined" : "Requested"}
+                </span>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRequestingId(event.id);
+                    requestAccessMutation.mutate(event.id);
+                  }}
+                  disabled={requestingId === event.id}
+                  className="flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 font-sans text-[9px] font-semibold uppercase tracking-[0.2em] text-cocoa hover:bg-white transition-colors disabled:opacity-60"
+                >
+                  {event.privacy === "invite_only"
+                    ? <Lock className="h-2.5 w-2.5" strokeWidth={2} />
+                    : <UserCheck className="h-2.5 w-2.5" strokeWidth={2} />}
+                  {requestingId === event.id ? "Sending…" : "Request"}
+                </button>
+              )
+            )}
           </div>
 
-          {/* Top-right heart */}
-          <button
-            onClick={(e) => { e.stopPropagation(); toggleFavorite(event.id); }}
-            className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/90"
-          >
-            <Heart
-              className="h-4 w-4"
-              strokeWidth={1.5}
-              fill={isFavorited(event.id) ? "#D89B86" : "none"}
-              color={isFavorited(event.id) ? "#D89B86" : "#3A2A20"}
-            />
-          </button>
+          {/* Top-right actions */}
+          <div className="absolute top-4 right-4 flex gap-2">
+            <button
+              onClick={(e) => handleShare(e, event)}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90"
+            >
+              <Share2 className="h-3.5 w-3.5 text-cocoa" strokeWidth={1.5} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleFavorite(event.id); }}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90"
+            >
+              <Heart
+                className="h-4 w-4"
+                strokeWidth={1.5}
+                fill={isFavorited(event.id) ? "#D89B86" : "none"}
+                color={isFavorited(event.id) ? "#D89B86" : "#3A2A20"}
+              />
+            </button>
+          </div>
 
           {/* Bottom overlay text */}
           <div className="absolute bottom-4 left-4 right-4">

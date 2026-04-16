@@ -39,7 +39,10 @@ import {
   ExternalLink,
   Heart,
   CreditCard,
+  Share2,
+  Repeat,
 } from "lucide-react";
+import { describeStoredRecurrence } from "@/lib/recurrence";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
@@ -72,6 +75,20 @@ const EventDetail = () => {
   const [requestMessage, setRequestMessage] = useState("");
   const [showInviteMembers, setShowInviteMembers] = useState(false);
   const [inviteSearch, setInviteSearch] = useState("");
+  const [inviteTab, setInviteTab] = useState<"members" | "new">("members");
+  const [inviteNewName, setInviteNewName] = useState("");
+  const [inviteNewEmail, setInviteNewEmail] = useState("");
+  const [isInvitingNew, setIsInvitingNew] = useState(false);
+  const [paymentToggleConfirm, setPaymentToggleConfirm] = useState<{
+    rsvpId: string;
+    guestId: string;
+    guestName: string;
+    currentPaid: boolean;
+  } | null>(null);
+  const [showPaymentLog, setShowPaymentLog] = useState(false);
+  const [showEditScopeModal, setShowEditScopeModal] = useState(false);
+  const [showCancelScopeModal, setShowCancelScopeModal] = useState(false);
+  const [isCancellingRecurring, setIsCancellingRecurring] = useState(false);
   const { isFavorited, toggleFavorite } = useFavorites();
 
   const { data: event, isLoading } = useQuery({
@@ -106,7 +123,7 @@ const EventDetail = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("rsvp_requests")
-        .select("*, profiles:user_id(full_name, avatar_url)")
+        .select("*, profiles!rsvp_requests_user_id_fkey(full_name, avatar_url)")
         .eq("event_id", id!);
       if (error) throw error;
       return data || [];
@@ -207,6 +224,147 @@ const EventDetail = () => {
     },
   });
 
+  const markPaidMutation = useMutation({
+    mutationFn: async ({ rsvpId, guestId, paid }: { rsvpId: string; guestId: string; paid: boolean }) => {
+      const { error } = await supabase
+        .from("rsvps")
+        .update({ paid })
+        .eq("id", rsvpId);
+      if (error) throw error;
+      // Write audit log
+      await (supabase as any).from("rsvp_payment_logs").insert({
+        rsvp_id: rsvpId,
+        event_id: id,
+        guest_id: guestId,
+        changed_by: user!.id,
+        paid,
+      }).throwOnError().catch(() => {});
+    },
+    onSuccess: (_, { paid }) => {
+      queryClient.invalidateQueries({ queryKey: ["rsvps", id] });
+      queryClient.invalidateQueries({ queryKey: ["payment_logs", id] });
+      toast({ title: paid ? "Marked as paid" : "Marked as not paid" });
+      setPaymentToggleConfirm(null);
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to update", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const { data: paymentLogs = [] } = useQuery({
+    queryKey: ["payment_logs", id],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("rsvp_payment_logs")
+        .select("*, changer:changed_by(full_name), guest:guest_id(full_name)")
+        .eq("event_id", id)
+        .order("created_at", { ascending: false });
+      if (error) return [];
+      return data as any[];
+    },
+    enabled: !!id && !!user,
+  });
+
+  const sendPaymentReminder = async (rsvp: any) => {
+    try {
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("email, phone, phone_verified")
+        .eq("id", rsvp.user_id)
+        .maybeSingle();
+      const hostName = (event?.profiles as any)?.full_name || "Your host";
+      const eventUrl = `${window.location.origin}/event/${id}`;
+      if (profileData?.email) {
+        await supabase.functions.invoke("send-transactional-email", {
+          body: {
+            templateName: "host-update",
+            recipientEmail: profileData.email,
+            idempotencyKey: `pay-reminder-${rsvp.id}-${Date.now()}`,
+            templateData: {
+              eventTitle: event?.title,
+              hostName,
+              message: `Just a friendly reminder to complete your payment of $${((event?.price_cents || 0) / 100).toFixed(0)} for this event. Tap below to pay and confirm your spot.`,
+              eventUrl,
+            },
+          },
+        });
+      }
+      if (profileData?.phone && profileData?.phone_verified) {
+        supabase.functions.invoke("send-sms", {
+          body: {
+            to: profileData.phone,
+            message: `${hostName}: Reminder to complete payment for ${event?.title}. ${eventUrl}`,
+          },
+        }).catch(() => {});
+      }
+      toast({ title: "Reminder sent!" });
+    } catch (err: any) {
+      toast({ title: "Failed to send reminder", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleInviteNewMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !event) return;
+    const trimmedName = inviteNewName.trim();
+    const trimmedEmail = inviteNewEmail.trim().toLowerCase();
+    if (!trimmedName || !trimmedEmail) return;
+    setIsInvitingNew(true);
+    try {
+      // Check if this email already belongs to an app member
+      const { data: existing } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", trimmedEmail)
+        .maybeSingle();
+      if (existing) {
+        // Already a member — send event invite directly
+        await inviteMemberMutation.mutateAsync(existing.id);
+        setInviteNewName("");
+        setInviteNewEmail("");
+        return;
+      }
+      // Not a member yet — create an app invite with event context in the note
+      const { data: invite, error } = await supabase
+        .from("invites")
+        .insert({
+          inviter_id: user.id,
+          invitee_email: trimmedEmail,
+          invitee_name: trimmedName,
+          personal_note: `I'd love for you to join me at ${event.title}. Sign up and I'll add you to the event!`,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      const { data: hostProfile } = await supabase
+        .from("profiles")
+        .select("full_name, city")
+        .eq("id", user.id)
+        .single();
+      await supabase.functions.invoke("send-transactional-email", {
+        body: {
+          templateName: "circle-invite",
+          recipientEmail: trimmedEmail,
+          idempotencyKey: `circle-invite-${invite.id}`,
+          templateData: {
+            inviterName: hostProfile?.full_name || "Your host",
+            inviteeName: trimmedName,
+            personalNote: `I'd love for you to join me at ${event.title}. Sign up and I'll add you to the event!`,
+            city: hostProfile?.city || null,
+            acceptUrl: `${window.location.origin}/accept-invite?token=${invite.token}`,
+          },
+        },
+      });
+      setInviteNewName("");
+      setInviteNewEmail("");
+      toast({ title: "Invite sent!", description: `${trimmedName} will receive an email to join Sonder Circle.` });
+    } catch (err: any) {
+      toast({ title: "Invite failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsInvitingNew(false);
+    }
+  };
+
   useEffect(() => {
     if (lightboxIndex === null) return;
     const handler = (e: KeyboardEvent) => {
@@ -241,6 +399,67 @@ const EventDetail = () => {
       toast({ title: "Failed to cancel event", description: err.message, variant: "destructive" });
     } finally {
       setIsCancelling(false);
+    }
+  };
+
+  const handleCancelFutureFrom = async () => {
+    if (!event || !id) return;
+    const eventAny = event as any;
+    const parentId = eventAny.parent_event_id || (eventAny.is_recurring_parent ? id : null);
+    if (!parentId) return;
+    setIsCancellingRecurring(true);
+    try {
+      // Set recurrence_end_date on parent to day before this event
+      const dayBefore = new Date(event.starts_at);
+      dayBefore.setDate(dayBefore.getDate() - 1);
+      await (supabase as any)
+        .from("events")
+        .update({ recurrence_end_date: dayBefore.toISOString().split("T")[0] })
+        .eq("id", parentId);
+      // Cancel this instance and all future instances
+      await (supabase as any)
+        .from("events")
+        .update({ status: "cancelled" })
+        .eq("parent_event_id", parentId)
+        .gte("starts_at", event.starts_at);
+      // Also cancel this event if it's an instance (not the parent itself)
+      if (eventAny.parent_event_id) {
+        await supabase.from("events").update({ status: "cancelled" }).eq("id", id);
+      }
+      setShowCancelScopeModal(false);
+      queryClient.invalidateQueries({ queryKey: ["event", id] });
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      toast({ title: "This event and all future events cancelled." });
+    } catch (err: any) {
+      toast({ title: "Failed to cancel", description: err.message, variant: "destructive" });
+    } finally {
+      setIsCancellingRecurring(false);
+    }
+  };
+
+  const handleCancelEntireSeries = async () => {
+    if (!event || !id) return;
+    const eventAny = event as any;
+    const parentId = eventAny.parent_event_id || (eventAny.is_recurring_parent ? id : null);
+    if (!parentId) return;
+    setIsCancellingRecurring(true);
+    try {
+      // Cancel all instances
+      await (supabase as any)
+        .from("events")
+        .update({ status: "cancelled" })
+        .eq("parent_event_id", parentId);
+      // Cancel the parent too
+      await supabase.from("events").update({ status: "cancelled" }).eq("id", parentId);
+      setShowCancelScopeModal(false);
+      queryClient.invalidateQueries({ queryKey: ["event", id] });
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      toast({ title: "Entire series cancelled." });
+      navigate("/");
+    } catch (err: any) {
+      toast({ title: "Failed to cancel series", description: err.message, variant: "destructive" });
+    } finally {
+      setIsCancellingRecurring(false);
     }
   };
 
@@ -512,7 +731,7 @@ const EventDetail = () => {
     );
   }
 
-  if (!user) return <Navigate to="/welcome" replace />;
+  if (!user) return <Navigate to="/join" replace />;
   if (!event) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background gap-4">
@@ -526,13 +745,23 @@ const EventDetail = () => {
 
   const hostProfile = event.profiles as any;
   const isHost = event.host_id === user.id;
+  const eventAny = event as any;
+  const isRecurring = !!(eventAny.parent_event_id || eventAny.is_recurring_parent);
+  const parentEventId: string | null =
+    eventAny.parent_event_id ?? (eventAny.is_recurring_parent ? id! : null);
+  const recurrenceLabel = describeStoredRecurrence(
+    eventAny.recurrence_type,
+    eventAny.recurrence_rule
+  );
   const isFree = event.price_cents === 0;
   const goingRsvps = rsvps.filter((r: any) => r.status === "going");
   const maybeRsvps = rsvps.filter((r: any) => r.status === "maybe");
   const declinedRsvps = rsvps.filter((r: any) => r.status === "declined");
   const spotsLeft = event.capacity != null ? event.capacity - goingRsvps.length : null;
   const isRequestToJoin = event.privacy === "request_to_join";
-  const needsRequestToJoin = isRequestToJoin && !isHost && !myRsvp;
+  const isInviteOnly = event.privacy === "invite_only";
+  const isInvited = eventInvites.some((inv: any) => inv.invited_user_id === user?.id);
+  const needsRequestToJoin = (isRequestToJoin || (isInviteOnly && !isInvited)) && !isHost && !myRsvp;
   const hasPendingRequest = myRequest?.status === "pending";
   const wasDeclined = myRequest?.status === "declined";
   const canChat = isHost || myRsvp?.status === "going" || myRsvp?.status === "maybe";
@@ -548,7 +777,6 @@ const EventDetail = () => {
   const hostInitials = (hostProfile?.full_name || "?").split(" ").map((w: string) => w[0]).join("").substring(0, 2).toUpperCase();
 
   const calendarBlock = (() => {
-    if (myRsvp?.status !== "going") return null;
     const start = new Date(event.starts_at);
     const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
     const fmtIcs = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
@@ -609,14 +837,28 @@ const EventDetail = () => {
               {showHostMenu && (
                 <div className="absolute right-0 top-12 w-48 rounded-2xl border border-cream bg-paper shadow-lg overflow-hidden z-30">
                   <button
-                    onClick={() => { setShowHostMenu(false); navigate(`/create?edit=${id}`); }}
+                    onClick={() => {
+                      setShowHostMenu(false);
+                      if (isRecurring) {
+                        setShowEditScopeModal(true);
+                      } else {
+                        navigate(`/create?edit=${id}`);
+                      }
+                    }}
                     className="flex w-full items-center gap-2.5 px-4 py-3.5 text-sm font-sans text-cocoa hover:bg-cream transition-colors"
                   >
                     <Pencil className="h-4 w-4" strokeWidth={1.5} />
                     Edit event
                   </button>
                   <button
-                    onClick={() => { setShowHostMenu(false); setShowCancelConfirm(true); }}
+                    onClick={() => {
+                      setShowHostMenu(false);
+                      if (isRecurring) {
+                        setShowCancelScopeModal(true);
+                      } else {
+                        setShowCancelConfirm(true);
+                      }
+                    }}
                     className="flex w-full items-center gap-2.5 px-4 py-3.5 text-sm font-sans text-destructive hover:bg-cream transition-colors"
                   >
                     <Ban className="h-4 w-4" strokeWidth={1.5} />
@@ -626,6 +868,19 @@ const EventDetail = () => {
               )}
             </div>
           )}
+          <button
+            onClick={async () => {
+              const url = window.location.href;
+              if (navigator.share) {
+                try { await navigator.share({ title: event.title, text: `Join me at ${event.title}`, url }); } catch {}
+              } else {
+                try { await navigator.clipboard.writeText(url); toast({ title: "Link copied!" }); } catch {}
+              }
+            }}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 backdrop-blur-sm"
+          >
+            <Share2 className="h-4 w-4 text-cocoa" strokeWidth={1.5} />
+          </button>
           {id && (
             <button
               onClick={() => toggleFavorite(id)}
@@ -696,42 +951,63 @@ const EventDetail = () => {
       {/* ── 3. METADATA ROW (3 columns) ──────────────────────────── */}
       <div className="mx-auto max-w-lg px-6 py-5 border-b border-cream">
         <div className="grid grid-cols-3 gap-4 text-center">
-          <div className="flex flex-col items-center gap-1.5">
-            <Calendar className="h-4 w-4 text-blush" strokeWidth={1.5} />
-            <p className="font-sans text-xs font-semibold text-cocoa">
-              {format(new Date(event.starts_at), "EEE, MMM d")}
-            </p>
-            <p className="font-sans text-[10.5px] text-taupe">
-              {format(new Date(event.starts_at), "h:mm a")}
-            </p>
-          </div>
-          <div className="flex flex-col items-center gap-1.5">
-            <MapPin className="h-4 w-4 text-blush" strokeWidth={1.5} />
-            {event.location ? (
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="flex flex-col items-center gap-1.5 w-full hover:opacity-70 transition-opacity">
+                <Calendar className="h-4 w-4 text-blush" strokeWidth={1.5} />
+                <p className="font-sans text-[13px] font-semibold text-cocoa">
+                  {format(new Date(event.starts_at), "EEE, MMM d")}
+                </p>
+                <p className="font-sans text-xs text-taupe">
+                  {format(new Date(event.starts_at), "h:mm a")}
+                </p>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-48 p-1 rounded-xl" align="center">
+              <button
+                onClick={calendarBlock.downloadIcs}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-sans text-cocoa transition-colors hover:bg-cream"
+              >
+                Apple / iOS Calendar
+              </button>
               <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
+                href={calendarBlock.googleUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-sans text-xs font-semibold text-cocoa hover:underline underline-offset-2 line-clamp-1"
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-sans text-cocoa transition-colors hover:bg-cream"
               >
-                {event.location.split(",")[0]}
+                Google Calendar
               </a>
-            ) : (
-              <p className="font-sans text-xs font-semibold text-cocoa">TBD</p>
-            )}
-            {event.location && (
-              <p className="font-sans text-[10.5px] text-taupe line-clamp-1">
+            </PopoverContent>
+          </Popover>
+          {event.location ? (
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-center gap-1.5 hover:opacity-70 transition-opacity"
+            >
+              <MapPin className="h-4 w-4 text-blush" strokeWidth={1.5} />
+              <p className="font-sans text-[13px] font-semibold text-cocoa line-clamp-1">
+                {event.location.split(",")[0]}
+              </p>
+              <p className="font-sans text-xs text-taupe line-clamp-1">
                 {event.location.split(",").slice(1).join(",").trim() || "View map"}
               </p>
-            )}
-          </div>
+            </a>
+          ) : (
+            <div className="flex flex-col items-center gap-1.5">
+              <MapPin className="h-4 w-4 text-blush" strokeWidth={1.5} />
+              <p className="font-sans text-xs font-semibold text-cocoa">TBD</p>
+            </div>
+          )}
           <div className="flex flex-col items-center gap-1.5">
             <Users className="h-4 w-4 text-blush" strokeWidth={1.5} />
-            <p className="font-sans text-xs font-semibold text-cocoa">
+            <p className="font-sans text-[13px] font-semibold text-cocoa">
               {goingRsvps.length} going
             </p>
             {spotsLeft !== null && (
-              <p className="font-sans text-[10.5px] text-taupe">
+              <p className="font-sans text-xs text-taupe">
                 {spotsLeft} spots left
               </p>
             )}
@@ -739,7 +1015,7 @@ const EventDetail = () => {
         </div>
 
         {/* Add to Calendar (only for going guests) */}
-        {calendarBlock && (
+        {calendarBlock && myRsvp?.status === "going" && (
           <div className="mt-4 flex justify-center">
             <Popover>
               <PopoverTrigger asChild>
@@ -768,6 +1044,78 @@ const EventDetail = () => {
           </div>
         )}
       </div>
+
+      {/* ── RECURRENCE ROW ───────────────────────────────────────── */}
+      {isRecurring && recurrenceLabel && (
+        <div className="mx-auto max-w-lg px-6 py-3 border-b border-cream">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Repeat className="h-3.5 w-3.5 text-blush shrink-0" strokeWidth={1.5} />
+              <span className="font-sans text-[13px] text-cocoa">{recurrenceLabel}</span>
+            </div>
+            {parentEventId && (
+              <button
+                onClick={() => navigate(`/series/${parentEventId}`)}
+                className="font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-taupe hover:text-cocoa transition-colors"
+              >
+                View series
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── REQUEST ACCESS BANNER (non-RSVP'd members on restricted events) ── */}
+      {needsRequestToJoin && event.status !== "cancelled" && (
+        <div className="mx-auto max-w-lg px-6 py-4 border-b border-cream">
+          <div className="rounded-2xl bg-cream px-5 py-4 space-y-3">
+            <div className="flex items-center gap-2">
+              {isInviteOnly
+                ? <Lock className="h-4 w-4 text-cocoa shrink-0" strokeWidth={1.5} />
+                : <UserCheck className="h-4 w-4 text-cocoa shrink-0" strokeWidth={1.5} />}
+              <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-cocoa">
+                {isInviteOnly ? "Invite Only" : "Request to Join"}
+              </p>
+            </div>
+            <p className="font-sans text-sm text-cocoa leading-relaxed">
+              {isInviteOnly
+                ? "This gathering is invite only. Send the host a request and they'll get back to you."
+                : "Interested in attending? Send the host a request and they'll review it."}
+            </p>
+            {hasPendingRequest ? (
+              <div className="flex items-center gap-2 rounded-full border border-blush/40 bg-white px-4 py-2.5">
+                <Clock className="h-4 w-4 text-blush" strokeWidth={1.5} />
+                <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-blush">Your request is pending</span>
+              </div>
+            ) : wasDeclined ? (
+              <div className="flex items-center gap-2 rounded-full border border-destructive/30 bg-white px-4 py-2.5">
+                <X className="h-4 w-4 text-destructive" strokeWidth={1.5} />
+                <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-destructive">Request was declined</span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={requestMessage}
+                  onChange={(e) => setRequestMessage(e.target.value)}
+                  placeholder="Add a note to the host (optional)"
+                  className="w-full rounded-full border border-cream bg-white px-4 py-2.5 text-sm font-sans text-espresso placeholder:text-taupe focus:border-cocoa focus:outline-none focus:ring-1 focus:ring-cocoa transition-colors"
+                />
+                <button
+                  onClick={() => requestToJoinMutation.mutate()}
+                  disabled={requestToJoinMutation.isPending}
+                  className="w-full flex items-center justify-center gap-2 rounded-full bg-cocoa py-3 transition-all hover:opacity-90 disabled:opacity-50"
+                >
+                  {requestToJoinMutation.isPending
+                    ? <Loader2 className="h-4 w-4 text-background animate-spin" />
+                    : <UserCheck className="h-4 w-4 text-background" strokeWidth={1.5} />}
+                  <span className="font-sans text-[12px] font-semibold uppercase tracking-[0.2em] text-background">Request Access</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── 4. TABS (flat, editorial) ────────────────────────────── */}
       <div className="mx-auto max-w-lg px-6 mt-0">
@@ -922,11 +1270,11 @@ const EventDetail = () => {
               </div>
             )}
 
-            {/* Host: Invite Members (invite_only) */}
-            {isHost && event.privacy === "invite_only" && event.status === "active" && (
+            {/* Host: Invite Members (invite_only + request_to_join) */}
+            {isHost && (event.privacy === "invite_only" || event.privacy === "request_to_join") && event.status !== "cancelled" && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">Invite Members</p>
+                  <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">Invite Guests</p>
                   <button
                     onClick={() => setShowInviteMembers(!showInviteMembers)}
                     className="flex items-center gap-1.5 rounded-full bg-cream px-3 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-cocoa transition-colors hover:bg-cream/80"
@@ -950,117 +1298,233 @@ const EventDetail = () => {
                 )}
 
                 {showInviteMembers && (
-                  <div className="border-b border-cream pb-5 space-y-3">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-taupe" strokeWidth={1.5} />
-                      <input
-                        type="text"
-                        placeholder="Search members…"
-                        value={inviteSearch}
-                        onChange={(e) => setInviteSearch(e.target.value)}
-                        className="w-full rounded-full border border-cream bg-paper py-2.5 pl-9 pr-4 text-sm font-sans text-espresso placeholder:text-taupe focus:outline-none focus:ring-1 focus:ring-cocoa"
-                      />
+                  <div className="border-b border-cream pb-5 space-y-4">
+                    {/* Tabs */}
+                    <div className="flex rounded-full border border-cream bg-paper p-0.5">
+                      <button
+                        onClick={() => setInviteTab("members")}
+                        className={cn(
+                          "flex-1 rounded-full py-2 font-sans text-[10px] font-semibold uppercase tracking-[0.15em] transition-colors",
+                          inviteTab === "members" ? "bg-cocoa text-background" : "text-taupe hover:text-cocoa"
+                        )}
+                      >
+                        App Members
+                      </button>
+                      <button
+                        onClick={() => setInviteTab("new")}
+                        className={cn(
+                          "flex-1 rounded-full py-2 font-sans text-[10px] font-semibold uppercase tracking-[0.15em] transition-colors",
+                          inviteTab === "new" ? "bg-cocoa text-background" : "text-taupe hover:text-cocoa"
+                        )}
+                      >
+                        Invite New
+                      </button>
                     </div>
-                    <div className="max-h-60 overflow-y-auto space-y-1">
-                      {allMembers
-                        .filter((m: any) => {
-                          if (m.id === user?.id) return false;
-                          if (eventInvites.some((inv: any) => inv.invited_user_id === m.id)) return false;
-                          if (rsvps.some((r: any) => r.user_id === m.id)) return false;
-                          if (!inviteSearch.trim()) return true;
-                          return (m.full_name || "").toLowerCase().includes(inviteSearch.toLowerCase());
-                        })
-                        .map((m: any) => (
-                          <div key={m.id} className="flex items-center gap-3 rounded-xl p-2.5 hover:bg-cream transition-colors">
-                            {m.avatar_url ? (
-                              <img src={m.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover" />
-                            ) : (
-                              <div className="h-8 w-8 rounded-full bg-blush/30 flex items-center justify-center font-serif text-xs text-espresso">
-                                {(m.full_name || "?")[0]}
+
+                    {inviteTab === "members" && (
+                      <>
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-taupe" strokeWidth={1.5} />
+                          <input
+                            type="text"
+                            placeholder="Search members…"
+                            value={inviteSearch}
+                            onChange={(e) => setInviteSearch(e.target.value)}
+                            className="w-full rounded-full border border-cream bg-paper py-2.5 pl-9 pr-4 text-sm font-sans text-espresso placeholder:text-taupe focus:outline-none focus:ring-1 focus:ring-cocoa"
+                          />
+                        </div>
+                        <div className="max-h-60 overflow-y-auto space-y-1">
+                          {allMembers
+                            .filter((m: any) => {
+                              if (m.id === user?.id) return false;
+                              if (eventInvites.some((inv: any) => inv.invited_user_id === m.id)) return false;
+                              if (rsvps.some((r: any) => r.user_id === m.id)) return false;
+                              if (!inviteSearch.trim()) return true;
+                              return (m.full_name || "").toLowerCase().includes(inviteSearch.toLowerCase());
+                            })
+                            .map((m: any) => (
+                              <div key={m.id} className="flex items-center gap-3 rounded-xl p-2.5 hover:bg-cream transition-colors">
+                                {m.avatar_url ? (
+                                  <img src={m.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover" />
+                                ) : (
+                                  <div className="h-8 w-8 rounded-full bg-blush/30 flex items-center justify-center font-serif text-xs text-espresso">
+                                    {(m.full_name || "?")[0]}
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-sans font-medium text-espresso truncate">{m.full_name || "Member"}</p>
+                                </div>
+                                <button
+                                  onClick={() => inviteMemberMutation.mutate(m.id)}
+                                  disabled={inviteMemberMutation.isPending}
+                                  className="rounded-full bg-cocoa px-3 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-background hover:opacity-90 disabled:opacity-50 transition-all"
+                                >
+                                  Invite
+                                </button>
                               </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-sans font-medium text-espresso truncate">{m.full_name || "Member"}</p>
-                            </div>
-                            <button
-                              onClick={() => inviteMemberMutation.mutate(m.id)}
-                              disabled={inviteMemberMutation.isPending}
-                              className="rounded-full bg-cocoa px-3 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-background hover:opacity-90 disabled:opacity-50 transition-all"
-                            >
-                              Invite
-                            </button>
-                          </div>
-                        ))}
-                      {allMembers.filter((m: any) => {
-                        if (m.id === user?.id) return false;
-                        if (eventInvites.some((inv: any) => inv.invited_user_id === m.id)) return false;
-                        if (rsvps.some((r: any) => r.user_id === m.id)) return false;
-                        if (!inviteSearch.trim()) return true;
-                        return (m.full_name || "").toLowerCase().includes(inviteSearch.toLowerCase());
-                      }).length === 0 && (
-                        <p className="text-sm font-sans text-taupe text-center py-4">
-                          {inviteSearch ? "No matching members found" : "All members have been invited"}
+                            ))}
+                          {allMembers.filter((m: any) => {
+                            if (m.id === user?.id) return false;
+                            if (eventInvites.some((inv: any) => inv.invited_user_id === m.id)) return false;
+                            if (rsvps.some((r: any) => r.user_id === m.id)) return false;
+                            if (!inviteSearch.trim()) return true;
+                            return (m.full_name || "").toLowerCase().includes(inviteSearch.toLowerCase());
+                          }).length === 0 && (
+                            <p className="text-sm font-sans text-taupe text-center py-4">
+                              {inviteSearch ? "No matching members found" : "All members have been invited"}
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    )}
+
+                    {inviteTab === "new" && (
+                      <form onSubmit={handleInviteNewMember} className="space-y-3">
+                        <p className="font-sans text-[11px] text-taupe leading-relaxed">
+                          Send them an invitation to join Sonder Circle. If they're already a member, they'll be added directly.
                         </p>
-                      )}
-                    </div>
+                        <input
+                          type="text"
+                          required
+                          value={inviteNewName}
+                          onChange={(e) => setInviteNewName(e.target.value)}
+                          placeholder="Their name"
+                          className="w-full rounded-full border border-cream bg-paper px-4 py-2.5 text-sm font-sans text-espresso placeholder:text-taupe focus:outline-none focus:ring-1 focus:ring-cocoa"
+                        />
+                        <input
+                          type="email"
+                          required
+                          value={inviteNewEmail}
+                          onChange={(e) => setInviteNewEmail(e.target.value)}
+                          placeholder="their@email.com"
+                          className="w-full rounded-full border border-cream bg-paper px-4 py-2.5 text-sm font-sans text-espresso placeholder:text-taupe focus:outline-none focus:ring-1 focus:ring-cocoa"
+                        />
+                        <button
+                          type="submit"
+                          disabled={isInvitingNew}
+                          className="w-full flex items-center justify-center gap-2 rounded-full bg-cocoa py-3 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-background hover:opacity-90 disabled:opacity-50 transition-all"
+                        >
+                          {isInvitingNew ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" strokeWidth={1.5} />}
+                          Send Invite
+                        </button>
+                      </form>
+                    )}
                   </div>
                 )}
               </div>
             )}
 
             {/* Payment overview (host, paid events) */}
-            {isHost && !isFree && (
-              <div className="border-b border-cream pb-5 space-y-4">
-                <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">Payment Overview</p>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="rounded-xl bg-cream p-3 text-center">
-                    <p className="font-serif text-2xl text-espresso">{goingRsvps.length}</p>
-                    <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-taupe mt-1">Going</p>
-                  </div>
-                  <div className="rounded-xl bg-cream p-3 text-center">
-                    <p className="font-serif text-2xl text-sage">{goingRsvps.filter((r: any) => r.paid).length}</p>
-                    <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-taupe mt-1">Paid</p>
-                  </div>
-                  <div className="rounded-xl bg-cream p-3 text-center">
-                    <p className="font-serif text-2xl text-destructive">{goingRsvps.filter((r: any) => !r.paid).length}</p>
-                    <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-taupe mt-1">Unpaid</p>
+            {isHost && !isFree && goingRsvps.length > 0 && (
+              <div className="border-b border-cream pb-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">Payments</p>
+                  <div className="flex items-center gap-2">
+                    <span className="font-sans text-[10px] text-taupe">
+                      {goingRsvps.filter((r: any) => r.paid).length} / {goingRsvps.length} paid
+                    </span>
+                    {paymentLogs.length > 0 && (
+                      <button
+                        onClick={() => setShowPaymentLog((v) => !v)}
+                        className="font-sans text-[9px] underline text-taupe underline-offset-2"
+                      >
+                        {showPaymentLog ? "Hide log" : "View log"}
+                      </button>
+                    )}
                   </div>
                 </div>
-                {goingRsvps.filter((r: any) => !r.paid).length > 0 && (
-                  <button
-                    onClick={async () => {
-                      const unpaidGuests = goingRsvps.filter((r: any) => !r.paid);
-                      for (const rsvp of unpaidGuests) {
-                        const { data: profileData } = await supabase
-                          .from("profiles")
-                          .select("email, phone, phone_verified")
-                          .eq("id", rsvp.user_id)
-                          .maybeSingle();
-                        if (profileData?.phone && profileData?.phone_verified) {
-                          supabase.functions.invoke("send-sms", {
-                            body: {
-                              to: profileData.phone,
-                              message: `Hey! Just a reminder to complete payment for ${event.title}: ${window.location.origin}/event/${id}`,
-                            },
-                          }).catch(() => {});
-                        }
-                      }
-                      toast({
-                        title: "Reminders sent",
-                        description: `Payment reminders sent to ${unpaidGuests.length} unpaid guest(s).`,
-                      });
-                    }}
-                    className="w-full flex items-center justify-center gap-2 rounded-full border border-cream bg-paper py-3 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-cocoa transition-colors hover:bg-cream"
-                  >
-                    <Bell className="h-4 w-4" strokeWidth={1.5} />
-                    Send Payment Reminders
-                  </button>
+                {/* Progress bar */}
+                <div className="h-1.5 rounded-full bg-cream overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-sage transition-all"
+                    style={{ width: goingRsvps.length > 0 ? `${(goingRsvps.filter((r: any) => r.paid).length / goingRsvps.length) * 100}%` : "0%" }}
+                  />
+                </div>
+                {/* Payment log */}
+                {showPaymentLog && paymentLogs.length > 0 && (
+                  <div className="rounded-xl border border-cream bg-background px-3 py-2 space-y-1.5">
+                    {paymentLogs.map((log: any) => (
+                      <p key={log.id} className="font-sans text-[11px] text-taupe leading-relaxed">
+                        <span className="text-espresso">{log.changer?.full_name || "Host"}</span> marked{" "}
+                        <span className="text-espresso">{log.guest?.full_name || "guest"}</span>{" "}
+                        as <span className={log.paid ? "text-sage" : "text-destructive/70"}>{log.paid ? "Paid" : "Not Paid"}</span>{" "}
+                        · {new Date(log.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </p>
+                    ))}
+                  </div>
                 )}
+                {/* Per-guest payment rows */}
+                <div className="space-y-0">
+                  {goingRsvps.map((rsvp: any) => {
+                    const profile = rsvp.profiles;
+                    const initials = (profile?.full_name || "?").split(" ").map((w: string) => w[0]).join("").substring(0, 2).toUpperCase();
+                    return (
+                      <div key={rsvp.id} className="flex items-center gap-3 border-b border-cream py-3 last:border-b-0">
+                        {profile?.avatar_url ? (
+                          <img src={profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                        ) : (
+                          <div className="h-8 w-8 rounded-full bg-blush/30 flex items-center justify-center font-serif text-xs text-espresso shrink-0">
+                            {initials}
+                          </div>
+                        )}
+                        <span className="flex-1 font-sans text-sm text-espresso truncate">{profile?.full_name || "Guest"}</span>
+                        {rsvp.paid ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="rounded-full bg-sage/20 px-2.5 py-0.5 font-sans text-[9px] font-semibold uppercase tracking-[0.2em] text-sage">
+                              Paid
+                            </span>
+                            <button
+                              onClick={() =>
+                                setPaymentToggleConfirm({
+                                  rsvpId: rsvp.id,
+                                  guestId: rsvp.user_id,
+                                  guestName: profile?.full_name || "Guest",
+                                  currentPaid: true,
+                                })
+                              }
+                              className="rounded-full border border-cream bg-paper px-2 py-0.5 font-sans text-[9px] font-semibold uppercase tracking-[0.15em] text-taupe hover:bg-cream transition-colors"
+                            >
+                              Undo
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => sendPaymentReminder(rsvp)}
+                              className="rounded-full border border-cream bg-paper px-2.5 py-1 font-sans text-[9px] font-semibold uppercase tracking-[0.15em] text-taupe hover:bg-cream transition-colors"
+                            >
+                              Remind
+                            </button>
+                            <button
+                              onClick={() =>
+                                setPaymentToggleConfirm({
+                                  rsvpId: rsvp.id,
+                                  guestId: rsvp.user_id,
+                                  guestName: profile?.full_name || "Guest",
+                                  currentPaid: false,
+                                })
+                              }
+                              disabled={markPaidMutation.isPending}
+                              className="rounded-full bg-cocoa px-2.5 py-1 font-sans text-[9px] font-semibold uppercase tracking-[0.15em] text-background hover:opacity-90 disabled:opacity-50 transition-all"
+                            >
+                              Mark Paid
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
             {/* Guest lists */}
-            <GuestSection label={`Going · ${goingRsvps.length}`} rsvps={goingRsvps} showPaymentStatus={isHost && !isFree} />
+            {/* For paid events the host view already shows Going guests above; show simple list for guests + all other sections */}
+            {(!isHost || isFree) && <GuestSection label={`Going · ${goingRsvps.length}`} rsvps={goingRsvps} showPaymentStatus={false} />}
+            {isHost && !isFree && maybeRsvps.length === 0 && declinedRsvps.length === 0 && goingRsvps.length === 0 && pendingRequests.length === 0 && (
+              <p className="font-serif italic text-sm text-taupe text-center py-6">No RSVPs yet.</p>
+            )}
+            {isHost && isFree && goingRsvps.length > 0 && <GuestSection label={`Going · ${goingRsvps.length}`} rsvps={goingRsvps} showPaymentStatus={false} />}
             {maybeRsvps.length > 0 && <GuestSection label={`Maybe · ${maybeRsvps.length}`} rsvps={maybeRsvps} />}
             {declinedRsvps.length > 0 && <GuestSection label={`Can't go · ${declinedRsvps.length}`} rsvps={declinedRsvps} />}
             {rsvps.length === 0 && pendingRequests.length === 0 && (
@@ -1206,11 +1670,16 @@ const EventDetail = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {isInviteOnly && (
+                    <p className="font-sans text-[11px] text-taupe text-center">
+                      This is an invite-only event. The host will review your request.
+                    </p>
+                  )}
                   <input
                     type="text"
                     value={requestMessage}
                     onChange={(e) => setRequestMessage(e.target.value)}
-                    placeholder="Add a note (optional)"
+                    placeholder="Add a note to the host (optional)"
                     className="w-full rounded-full border border-cream bg-paper px-4 py-2.5 text-sm font-sans text-espresso placeholder:text-taupe focus:border-cocoa focus:outline-none focus:ring-1 focus:ring-cocoa transition-colors"
                   />
                   <button
@@ -1223,7 +1692,7 @@ const EventDetail = () => {
                     ) : (
                       <UserCheck className="h-4 w-4 text-background" strokeWidth={1.5} />
                     )}
-                    <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-background">Request to Join</span>
+                    <span className="font-sans text-[12px] font-semibold uppercase tracking-[0.2em] text-background">Request to Join</span>
                   </button>
                 </div>
               )}
@@ -1237,18 +1706,20 @@ const EventDetail = () => {
         <div className="fixed bottom-[70px] left-0 right-0 z-20 border-t border-cream bg-background">
           <div className="px-6 py-3">
             <div className="mx-auto max-w-lg">
-              {isHost ? (
-                <div className="text-center space-y-1">
-                  <p className="font-serif italic text-[12px] text-taupe">You're hosting this event</p>
-                  <button
-                    onClick={() => navigate(`/create?edit=${id}`)}
-                    className="w-full rounded-full bg-cocoa py-2.5 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90"
-                  >
-                    Manage Event
-                  </button>
-                </div>
-              ) : myRsvp ? (
-                /* Guest has RSVP'd — show current status with ability to change */
+              <div className="space-y-2">
+                {isHost && (
+                  <div className="flex items-center justify-between px-1">
+                    <p className="font-serif italic text-[12px] text-taupe">You're hosting</p>
+                    <button
+                      onClick={() => navigate(`/create?edit=${id}`)}
+                      className="font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-taupe hover:text-cocoa transition-colors"
+                    >
+                      Manage →
+                    </button>
+                  </div>
+                )}
+              {myRsvp ? (
+                /* Has RSVP'd — show current status with ability to change */
                 <div className="space-y-2">
                   <div className="flex gap-2">
                     <button
@@ -1309,12 +1780,13 @@ const EventDetail = () => {
                   <button
                     onClick={() => rsvpMutation.mutate("going")}
                     disabled={rsvpMutation.isPending}
-                    className="flex-1 rounded-full bg-cocoa py-3 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90 disabled:opacity-50"
+                    className="flex-1 rounded-full bg-cocoa py-3 font-sans text-[12px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90 disabled:opacity-50"
                   >
                     I'm going
                   </button>
                 </div>
               )}
+              </div>
             </div>
           </div>
         </div>
@@ -1348,14 +1820,44 @@ const EventDetail = () => {
             <div className="px-6 py-3">
               <div className="mx-auto max-w-lg">
                 {isHost ? (
-                  <div className="text-center space-y-1">
-                    <p className="font-serif italic text-[12px] text-taupe">You're hosting this event</p>
-                    <button
-                      onClick={() => navigate(`/create?edit=${id}`)}
-                      className="w-full rounded-full bg-cocoa py-2.5 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90"
-                    >
-                      Manage Event
-                    </button>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between px-1">
+                      <p className="font-serif italic text-[12px] text-taupe">You're hosting</p>
+                      <button
+                        onClick={() => navigate(`/create?edit=${id}`)}
+                        className="font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-taupe hover:text-cocoa transition-colors"
+                      >
+                        Manage →
+                      </button>
+                    </div>
+                    {myRsvp ? (
+                      <div className="flex gap-2">
+                        <button onClick={() => rsvpMutation.mutate("going")} disabled={rsvpMutation.isPending}
+                          className={cn("flex-1 rounded-full py-3 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] transition-all disabled:opacity-50",
+                            myRsvp.status === "going" ? "bg-sage/20 text-sage border border-sage/40" : "border border-cream bg-paper text-taupe hover:bg-cream")}
+                        >{myRsvp.status === "going" ? "✓ Going" : "Going"}</button>
+                        <button onClick={() => rsvpMutation.mutate("maybe")} disabled={rsvpMutation.isPending}
+                          className={cn("flex-1 rounded-full py-3 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] transition-all disabled:opacity-50",
+                            myRsvp.status === "maybe" ? "bg-blush/20 text-blush border border-blush/40" : "border border-cream bg-paper text-taupe hover:bg-cream")}
+                        >{myRsvp.status === "maybe" ? "✓ Maybe" : "Maybe"}</button>
+                        <button onClick={() => rsvpMutation.mutate("declined")} disabled={rsvpMutation.isPending}
+                          className={cn("flex-1 rounded-full py-3 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] transition-all disabled:opacity-50",
+                            myRsvp.status === "declined" ? "bg-cocoa/10 text-cocoa border border-cocoa/30" : "border border-cream bg-paper text-taupe hover:bg-cream")}
+                        >{myRsvp.status === "declined" ? "✓ Can't go" : "Can't go"}</button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button onClick={() => rsvpMutation.mutate("declined")} disabled={rsvpMutation.isPending}
+                          className="rounded-full border border-cream bg-paper py-3 px-4 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-taupe transition-all hover:bg-cream disabled:opacity-50"
+                        >Can't go</button>
+                        <button onClick={() => rsvpMutation.mutate("maybe")} disabled={rsvpMutation.isPending}
+                          className="rounded-full border border-cream bg-paper py-3 px-4 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-taupe transition-all hover:bg-cream disabled:opacity-50"
+                        >Maybe</button>
+                        <button onClick={() => rsvpMutation.mutate("going")} disabled={rsvpMutation.isPending}
+                          className="flex-1 rounded-full bg-cocoa py-3 font-sans text-[12px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90 disabled:opacity-50"
+                        >I'm going</button>
+                      </div>
+                    )}
                   </div>
                 ) : myRsvp?.paid ? (
                   <div className="flex items-center justify-center gap-2 rounded-full bg-sage/20 py-3.5">
@@ -1384,7 +1886,7 @@ const EventDetail = () => {
                     <button
                       onClick={() => setShowCheckout(true)}
                       disabled={rsvpMutation.isPending}
-                      className="flex-1 rounded-full bg-cocoa py-3.5 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90 disabled:opacity-50"
+                      className="flex-1 rounded-full bg-cocoa py-3.5 font-sans text-[12px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90 disabled:opacity-50"
                     >
                       {`RSVP · $${(event.price_cents / 100).toFixed(0)}`}
                     </button>
@@ -1482,6 +1984,154 @@ const EventDetail = () => {
           </div>
         </div>
       )}
+      {/* ── PAYMENT TOGGLE CONFIRM ───────────────────────────────── */}
+      {paymentToggleConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-6">
+          <div className="w-full max-w-sm rounded-3xl bg-paper p-6 space-y-4">
+            <h2 className="font-serif text-xl text-espresso">
+              Mark {paymentToggleConfirm.guestName} as{" "}
+              {paymentToggleConfirm.currentPaid ? "Not Paid" : "Paid"}?
+            </h2>
+            <p className="font-sans text-sm text-taupe leading-relaxed">
+              {paymentToggleConfirm.currentPaid
+                ? "This will revert their payment status. You can mark them paid again at any time."
+                : "This manually marks this guest as having paid. Use this if payment was collected outside the app."}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPaymentToggleConfirm(null)}
+                className="flex-1 rounded-full border border-cream bg-paper py-3 font-sans text-sm font-medium text-cocoa transition-colors hover:bg-cream"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() =>
+                  markPaidMutation.mutate({
+                    rsvpId: paymentToggleConfirm.rsvpId,
+                    guestId: paymentToggleConfirm.guestId,
+                    paid: !paymentToggleConfirm.currentPaid,
+                  })
+                }
+                disabled={markPaidMutation.isPending}
+                className="flex-1 rounded-full bg-cocoa py-3 font-sans text-sm font-medium text-background transition-colors hover:opacity-90 disabled:opacity-50"
+              >
+                {markPaidMutation.isPending ? "Saving…" : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT SCOPE MODAL ─────────────────────────────────────── */}
+      {showEditScopeModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-t-3xl bg-paper px-6 pt-6 pb-10 space-y-2">
+            <h2 className="font-serif text-xl text-espresso mb-4">Edit recurring event</h2>
+            <button
+              onClick={() => {
+                setShowEditScopeModal(false);
+                navigate(`/create?edit=${id}`);
+              }}
+              className="flex w-full flex-col gap-0.5 rounded-2xl border border-cream bg-paper px-4 py-4 text-left transition-colors hover:bg-cream"
+            >
+              <span className="font-sans text-sm font-semibold text-espresso">This event only</span>
+              <span className="font-sans text-[12px] text-taupe">Only changes this one instance</span>
+            </button>
+            <button
+              onClick={() => {
+                setShowEditScopeModal(false);
+                navigate(
+                  `/create?edit=${parentEventId}&recurEditMode=future&fromDate=${encodeURIComponent(event.starts_at)}&redirectTo=${id}`
+                );
+              }}
+              className="flex w-full flex-col gap-0.5 rounded-2xl border border-cream bg-paper px-4 py-4 text-left transition-colors hover:bg-cream"
+            >
+              <span className="font-sans text-sm font-semibold text-espresso">
+                This and all future events
+              </span>
+              <span className="font-sans text-[12px] text-taupe">
+                Updates the series from here forward
+              </span>
+            </button>
+            <button
+              onClick={() => {
+                setShowEditScopeModal(false);
+                navigate(`/create?edit=${parentEventId}&recurEditMode=all&redirectTo=${id}`);
+              }}
+              className="flex w-full flex-col gap-0.5 rounded-2xl border border-cream bg-paper px-4 py-4 text-left transition-colors hover:bg-cream"
+            >
+              <span className="font-sans text-sm font-semibold text-espresso">
+                All events in series
+              </span>
+              <span className="font-sans text-[12px] text-taupe">
+                Updates every event including past ones
+              </span>
+            </button>
+            <button
+              onClick={() => setShowEditScopeModal(false)}
+              className="w-full py-3 font-sans text-sm text-taupe"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── CANCEL SCOPE MODAL ───────────────────────────────────── */}
+      {showCancelScopeModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-t-3xl bg-paper px-6 pt-6 pb-10 space-y-2">
+            <h2 className="font-serif text-xl text-espresso mb-4">Cancel recurring event</h2>
+            <button
+              onClick={() => {
+                setShowCancelScopeModal(false);
+                setShowCancelConfirm(true);
+              }}
+              disabled={isCancellingRecurring}
+              className="flex w-full flex-col gap-0.5 rounded-2xl border border-cream bg-paper px-4 py-4 text-left transition-colors hover:bg-cream disabled:opacity-50"
+            >
+              <span className="font-sans text-sm font-semibold text-espresso">
+                This event only
+              </span>
+              <span className="font-sans text-[12px] text-taupe">
+                Cancels just this instance, series continues
+              </span>
+            </button>
+            <button
+              onClick={handleCancelFutureFrom}
+              disabled={isCancellingRecurring}
+              className="flex w-full flex-col gap-0.5 rounded-2xl border border-cream bg-paper px-4 py-4 text-left transition-colors hover:bg-cream disabled:opacity-50"
+            >
+              <span className="font-sans text-sm font-semibold text-espresso">
+                This and all future events
+              </span>
+              <span className="font-sans text-[12px] text-taupe">
+                {isCancellingRecurring ? "Cancelling…" : "Stops the series from this date forward"}
+              </span>
+            </button>
+            <button
+              onClick={handleCancelEntireSeries}
+              disabled={isCancellingRecurring}
+              className="flex w-full flex-col gap-0.5 rounded-2xl border border-destructive/30 bg-paper px-4 py-4 text-left transition-colors hover:bg-destructive/5 disabled:opacity-50"
+            >
+              <span className="font-sans text-sm font-semibold text-destructive">
+                Cancel entire series
+              </span>
+              <span className="font-sans text-[12px] text-taupe">
+                {isCancellingRecurring ? "Cancelling…" : "Cancels all past and future events"}
+              </span>
+            </button>
+            <button
+              onClick={() => setShowCancelScopeModal(false)}
+              disabled={isCancellingRecurring}
+              className="w-full py-3 font-sans text-sm text-taupe"
+            >
+              Keep event
+            </button>
+          </div>
+        </div>
+      )}
+
       <BottomNav />
     </div>
   );

@@ -3,7 +3,16 @@ import { useAuth } from "@/lib/auth";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { ArrowLeft, CalendarIcon, Home, ImagePlus, Lock, UserCheck, Globe } from "lucide-react";
+import { ArrowLeft, CalendarIcon, Home, ImagePlus, Lock, UserCheck, Globe, UserPlus, X, Search, Repeat } from "lucide-react";
+import {
+  type RecurrenceType,
+  type MonthlyMode,
+  buildRecurrenceRule,
+  getRecurrenceDbType,
+  describeRecurrence,
+  computePreviewDates,
+} from "@/lib/recurrence";
+import { useQuery } from "@tanstack/react-query";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -29,8 +38,14 @@ const CreateEvent = () => {
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const editId = searchParams.get("edit");
+  const recurEditMode = searchParams.get("recurEditMode"); // "future" | "all" | null
+  const fromDate = searchParams.get("fromDate");
 
   const [title, setTitle] = useState("");
+  // Recurrence (new events only)
+  const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>("none");
+  const [monthlyMode, setMonthlyMode] = useState<MonthlyMode>("same_day");
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState<Date | undefined>();
   const [description, setDescription] = useState("");
   const [date, setDate] = useState<Date>();
   const [time, setTime] = useState("19:00");
@@ -43,6 +58,21 @@ const CreateEvent = () => {
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loadingEvent, setLoadingEvent] = useState(!!editId);
+  const [initialGuestIds, setInitialGuestIds] = useState<string[]>([]);
+  const [showGuestPicker, setShowGuestPicker] = useState(false);
+  const [guestSearch, setGuestSearch] = useState("");
+
+  const { data: allMembers = [] } = useQuery({
+    queryKey: ["all_members_create"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url")
+        .order("full_name");
+      return data || [];
+    },
+    enabled: showGuestPicker,
+  });
 
   useEffect(() => {
     if (!editId || !user) return;
@@ -82,7 +112,7 @@ const CreateEvent = () => {
     );
   }
 
-  if (!user) return <Navigate to="/welcome" replace />;
+  if (!user) return <Navigate to="/join" replace />;
 
   const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -95,6 +125,10 @@ const CreateEvent = () => {
     e.preventDefault();
     if (!date) {
       toast({ title: "Please select a date", variant: "destructive" });
+      return;
+    }
+    if (!location.trim()) {
+      toast({ title: "Please add a location", variant: "destructive" });
       return;
     }
     setSubmitting(true);
@@ -129,10 +163,52 @@ const CreateEvent = () => {
         };
         const { error } = await supabase.from("events").update(updatePayload).eq("id", editId);
         if (error) throw error;
+
+        if (recurEditMode === "future" && fromDate) {
+          // Delete all active instances from this date forward and regenerate
+          await (supabase as any)
+            .from("events")
+            .delete()
+            .eq("parent_event_id", editId)
+            .gte("starts_at", fromDate)
+            .eq("status", "active");
+          (supabase as any).rpc("generate_recurring_instances").catch(() => {});
+        } else if (recurEditMode === "all") {
+          // Propagate metadata changes to all existing instances
+          const instancePayload = {
+            title,
+            description: description || null,
+            location: location || null,
+            capacity: capacity ? parseInt(capacity) : null,
+            price_cents: priceCents,
+            auto_reminders_enabled: autoReminders,
+            privacy,
+            ...(coverUrl !== undefined ? { cover_image_url: coverUrl } : {}),
+          };
+          await (supabase as any)
+            .from("events")
+            .update(instancePayload)
+            .eq("parent_event_id", editId);
+        }
+
         toast({ title: "Event updated!" });
-        navigate(`/event/${editId}`);
+        const redirectTo = searchParams.get("redirectTo") || editId;
+        navigate(`/event/${redirectTo}`);
       } else {
-        const { data, error } = await supabase
+        // Build recurrence payload for new recurring events
+        const isRecurring = recurrenceType !== "none";
+        const recurrencePayload = isRecurring
+          ? {
+              recurrence_type: getRecurrenceDbType(recurrenceType, monthlyMode),
+              recurrence_rule: buildRecurrenceRule(startsAt, recurrenceType, monthlyMode),
+              recurrence_end_date: recurrenceEndDate
+                ? format(recurrenceEndDate, "yyyy-MM-dd")
+                : null,
+              is_recurring_parent: true,
+            }
+          : {};
+
+        const { data, error } = await (supabase as any)
           .from("events")
           .insert({
             host_id: user.id,
@@ -145,10 +221,26 @@ const CreateEvent = () => {
             price_cents: priceCents,
             auto_reminders_enabled: autoReminders,
             privacy,
+            ...recurrencePayload,
           })
           .select("id")
           .single();
         if (error) throw error;
+
+        if (isRecurring) {
+          // Fire and forget — generates next 3 months of instances
+          (supabase as any).rpc("generate_recurring_instances").catch(() => {});
+        }
+
+        if (initialGuestIds.length > 0) {
+          await supabase.from("event_invites").insert(
+            initialGuestIds.map((memberId) => ({
+              event_id: data.id,
+              invited_user_id: memberId,
+              invited_by: user.id,
+            }))
+          );
+        }
         toast({ title: "Event created!" });
         navigate(`/event/${data.id}`);
       }
@@ -325,6 +417,140 @@ const CreateEvent = () => {
           </div>
         </div>
 
+        {/* Repeats (new events only) */}
+        {!editId && (
+          <div className="space-y-3">
+            <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe flex items-center gap-1.5">
+              <Repeat className="h-3 w-3" strokeWidth={1.5} />
+              Repeats
+            </label>
+
+            {/* Frequency options */}
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  { value: "none", label: "Does not repeat" },
+                  { value: "weekly", label: "Every week" },
+                  { value: "biweekly", label: "Every 2 weeks" },
+                  { value: "monthly", label: "Every month" },
+                ] as { value: RecurrenceType; label: string }[]
+              ).map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setRecurrenceType(value)}
+                  className={cn(
+                    "rounded-xl border px-3 py-2.5 text-left font-sans text-sm transition-all",
+                    recurrenceType === value
+                      ? "border-cocoa bg-cocoa/5 text-espresso"
+                      : "border-cream bg-paper text-cocoa hover:border-taupe/30"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Monthly sub-option */}
+            {recurrenceType === "monthly" && date && (
+              <div className="space-y-2 pl-1">
+                {(
+                  [
+                    { value: "same_day", label: describeRecurrence(date, "monthly", "same_day") },
+                    { value: "same_date", label: describeRecurrence(date, "monthly", "same_date") },
+                  ] as { value: MonthlyMode; label: string }[]
+                ).map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setMonthlyMode(value)}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-xl border px-3 py-2.5 w-full font-sans text-sm transition-all",
+                      monthlyMode === value
+                        ? "border-cocoa bg-cocoa/5 text-espresso"
+                        : "border-cream bg-paper text-cocoa hover:border-taupe/30"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "h-3.5 w-3.5 shrink-0 rounded-full border-2 transition-colors",
+                        monthlyMode === value ? "border-cocoa bg-cocoa" : "border-taupe/40"
+                      )}
+                    />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Confirmation text for weekly / biweekly */}
+            {(recurrenceType === "weekly" || recurrenceType === "biweekly") && date && (
+              <p className="font-serif italic text-[13px] text-cocoa pl-1">
+                {describeRecurrence(date, recurrenceType, monthlyMode)}
+              </p>
+            )}
+
+            {/* End date picker */}
+            {recurrenceType !== "none" && (
+              <div className="flex items-center gap-3">
+                <span className="font-sans text-[11px] text-taupe shrink-0">Ends:</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex-1 rounded-xl border border-cream bg-paper px-3 py-2.5 font-sans text-sm text-left transition-colors",
+                        recurrenceEndDate ? "text-espresso" : "text-taupe/50"
+                      )}
+                    >
+                      {recurrenceEndDate ? format(recurrenceEndDate, "MMM d, yyyy") : "Ongoing"}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 rounded-xl" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={recurrenceEndDate}
+                      onSelect={setRecurrenceEndDate}
+                      disabled={(d) => date ? d <= date : false}
+                      className="pointer-events-auto p-3"
+                    />
+                    {recurrenceEndDate && (
+                      <button
+                        type="button"
+                        onClick={() => setRecurrenceEndDate(undefined)}
+                        className="w-full py-2.5 font-sans text-[11px] text-taupe border-t border-cream hover:text-destructive transition-colors"
+                      >
+                        Clear — set ongoing
+                      </button>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
+
+            {/* Preview: next 3 dates */}
+            {recurrenceType !== "none" && date && (() => {
+              const previews = computePreviewDates(date, recurrenceType, monthlyMode, recurrenceEndDate, 3);
+              return (
+                <div className="rounded-xl bg-paper border border-cream px-4 py-3 space-y-1">
+                  <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.22em] text-taupe">
+                    Upcoming
+                  </p>
+                  {previews.length > 0 ? (
+                    <p className="font-sans text-[13px] text-cocoa">
+                      {previews.map((d) => format(d, "MMM d")).join(" · ")}
+                    </p>
+                  ) : (
+                    <p className="font-sans text-[12px] italic text-taupe/60">
+                      No upcoming dates within the end date
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
         {/* Location */}
         <div className="space-y-2">
           <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">Location</label>
@@ -386,6 +612,86 @@ const CreateEvent = () => {
             />
           </button>
         </div>
+
+        {/* Initial guests (new events only) */}
+        {!editId && (
+          <div className="space-y-3 border-b border-cream pb-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">Add Guests</p>
+                <p className="font-sans text-[10px] text-taupe mt-0.5">Notify app members at creation — optional</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGuestPicker(!showGuestPicker)}
+                className="flex items-center gap-1.5 rounded-full bg-cream px-3 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-cocoa transition-colors hover:bg-cream/80"
+              >
+                <UserPlus className="h-3.5 w-3.5" strokeWidth={1.5} />
+                {showGuestPicker ? "Close" : "Add"}
+              </button>
+            </div>
+
+            {initialGuestIds.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {initialGuestIds.map((gid) => {
+                  const m = allMembers.find((m: any) => m.id === gid);
+                  return (
+                    <span key={gid} className="flex items-center gap-1.5 rounded-full bg-cocoa/10 px-3 py-1 font-sans text-[10px] font-semibold text-cocoa">
+                      {m?.full_name || "Member"}
+                      <button type="button" onClick={() => setInitialGuestIds((ids) => ids.filter((i) => i !== gid))}>
+                        <X className="h-3 w-3" strokeWidth={2} />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            {showGuestPicker && (
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-taupe" strokeWidth={1.5} />
+                  <input
+                    type="text"
+                    placeholder="Search members…"
+                    value={guestSearch}
+                    onChange={(e) => setGuestSearch(e.target.value)}
+                    className="w-full rounded-full border border-cream bg-paper py-2.5 pl-9 pr-4 text-sm font-sans text-espresso placeholder:text-taupe focus:outline-none focus:ring-1 focus:ring-cocoa"
+                  />
+                </div>
+                <div className="max-h-52 overflow-y-auto space-y-1 rounded-xl border border-cream bg-paper p-1">
+                  {allMembers
+                    .filter((m: any) => {
+                      if (m.id === user?.id) return false;
+                      if (initialGuestIds.includes(m.id)) return false;
+                      if (!guestSearch.trim()) return true;
+                      return (m.full_name || "").toLowerCase().includes(guestSearch.toLowerCase());
+                    })
+                    .map((m: any) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => { setInitialGuestIds((ids) => [...ids, m.id]); setGuestSearch(""); }}
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-cream transition-colors text-left"
+                      >
+                        {m.avatar_url ? (
+                          <img src={m.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover" />
+                        ) : (
+                          <div className="h-7 w-7 rounded-full bg-blush/30 flex items-center justify-center font-serif text-[11px] text-espresso">
+                            {(m.full_name || "?")[0]}
+                          </div>
+                        )}
+                        <span className="text-sm font-sans text-espresso">{m.full_name || "Member"}</span>
+                      </button>
+                    ))}
+                  {allMembers.filter((m: any) => m.id !== user?.id && !initialGuestIds.includes(m.id) && (!guestSearch.trim() || (m.full_name || "").toLowerCase().includes(guestSearch.toLowerCase()))).length === 0 && (
+                    <p className="text-sm font-sans text-taupe text-center py-3">{guestSearch ? "No matches" : "No other members yet"}</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Submit */}
         <button
