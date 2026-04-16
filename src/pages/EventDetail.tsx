@@ -115,7 +115,7 @@ const EventDetail = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("events")
-        .select("*, profiles!events_host_id_fkey(full_name, avatar_url, email)")
+        .select("*, profiles!events_host_id_fkey(full_name, avatar_url)")
         .eq("id", id!)
         .maybeSingle();
       if (error) throw error;
