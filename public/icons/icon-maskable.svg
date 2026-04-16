@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Full bleed background — the entire canvas is the safe zone fill -->
+  <rect width="512" height="512" fill="#3A2010"/>
+  <rect width="512" height="512" fill="url(#mgrad)" opacity="0.35"/>
+  <defs>
+    <radialGradient id="mgrad" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#D89B86"/>
+      <stop offset="100%" stop-color="#3A2010"/>
+    </radialGradient>
+  </defs>
+  <!-- SC kept inside 40% safe zone (102–410 on each axis) -->
+  <text
+    x="256"
+    y="256"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="170"
+    font-weight="400"
+    fill="#FAF6EE"
+    text-anchor="middle"
+    dominant-baseline="central"
+    letter-spacing="6"
+    opacity="0.97"
+  >SC</text>
+  <rect x="163" y="304" width="186" height="1.5" fill="#FAF6EE" opacity="0.3" rx="1"/>
+</svg>

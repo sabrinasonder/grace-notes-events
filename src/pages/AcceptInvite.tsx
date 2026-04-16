@@ -125,7 +125,7 @@ const AcceptInvite = () => {
                 This invite link isn't valid. If you believe this is an error, ask the person who invited you to resend.
               </p>
               <button
-                onClick={() => navigate("/welcome")}
+                onClick={() => navigate("/join")}
                 className="label-meta text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors"
               >
                 I already have an account
@@ -141,7 +141,7 @@ const AcceptInvite = () => {
                 This invitation has expired. Ask your friend to send a new one — invitations are valid for 14 days.
               </p>
               <button
-                onClick={() => navigate("/welcome")}
+                onClick={() => navigate("/join")}
                 className="label-meta text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors"
               >
                 I already have an account

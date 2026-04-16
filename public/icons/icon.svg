@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Warm dark background with rounded corners (iOS-style safe area) -->
+  <rect width="512" height="512" rx="0" fill="#3A2010"/>
+  <!-- Subtle inner warmth layer -->
+  <rect width="512" height="512" rx="0" fill="url(#grad)" opacity="0.35"/>
+  <defs>
+    <radialGradient id="grad" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#D89B86"/>
+      <stop offset="100%" stop-color="#3A2010"/>
+    </radialGradient>
+  </defs>
+  <!-- "SC" monogram in elegant serif -->
+  <text
+    x="256"
+    y="256"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="210"
+    font-weight="400"
+    fill="#FAF6EE"
+    text-anchor="middle"
+    dominant-baseline="central"
+    letter-spacing="6"
+    opacity="0.97"
+  >SC</text>
+  <!-- Subtle thin rule beneath the letters -->
+  <rect x="148" y="318" width="216" height="1.5" fill="#FAF6EE" opacity="0.3" rx="1"/>
+</svg>

@@ -2,20 +2,54 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+
+    <!-- Viewport — viewport-fit=cover fills the notch/home indicator on iPhones -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#FAF6EE" />
+
+    <!-- ── PWA / Web App Manifest ─────────────────────────────────────────── -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Chrome / Android theme color (top status bar) -->
+    <meta name="theme-color" content="#3A2010" />
+
+    <!-- ── Apple / iOS ───────────────────────────────────────────────────── -->
+    <!-- Enables full-screen mode when launched from home screen -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- Shows black status bar that blends into the app header -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Name shown below the icon on the home screen -->
+    <meta name="apple-mobile-web-app-title" content="Sonder Circle" />
+    <!-- Home screen icon (iOS ignores manifest icons, needs this tag) -->
+    <link rel="apple-touch-icon" href="/icons/icon.svg" />
+    <!-- Splash screen background color while the app loads -->
+    <meta name="apple-mobile-web-app-background-color" content="#FAF6EE" />
+
+    <!-- ── Splash screens for common iPhone sizes (optional but polished) ── -->
+    <!-- These will use the browser default until real splash images are added -->
+
+    <!-- ── Standard head ─────────────────────────────────────────────────── -->
     <title>Sonder Circle — Private Community Events</title>
-    <meta name="description" content="Intimate gatherings, beautifully organized. A private events platform for your women&#39;s circle.">
+    <meta name="description" content="Intimate gatherings, beautifully organized. A private events platform for your women's circle." />
     <meta name="author" content="Sonder Circle" />
-    
-    
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+
+    <!-- ── Open Graph / Social ───────────────────────────────────────────── -->
     <meta property="og:type" content="website" />
+    <meta property="og:title" content="Sonder Circle — Private Community Events" />
+    <meta property="og:description" content="Intimate gatherings, beautifully organized. A private events platform for your women's circle." />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta property="og:title" content="Sonder Circle — Private Community Events">
-  <meta name="twitter:title" content="Sonder Circle — Private Community Events">
-  <meta property="og:description" content="Intimate gatherings, beautifully organized. A private events platform for your women&#39;s circle.">
-  <meta name="twitter:description" content="Intimate gatherings, beautifully organized. A private events platform for your women&#39;s circle.">
-</head>
+    <meta name="twitter:title" content="Sonder Circle — Private Community Events" />
+    <meta name="twitter:description" content="Intimate gatherings, beautifully organized. A private events platform for your women's circle." />
+
+    <!-- ── Mobile UX extras ──────────────────────────────────────────────── -->
+    <!-- Prevents iOS from making phone numbers tappable -->
+    <meta name="format-detection" content="telephone=no" />
+    <!-- Disables automatic translation prompts -->
+    <meta name="google" content="notranslate" />
+  </head>
 
   <body>
     <div id="root"></div>

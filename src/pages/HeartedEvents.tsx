@@ -48,7 +48,7 @@ const HeartedEvents = () => {
       </div>
     );
   }
-  if (!user) return <Navigate to="/welcome" replace />;
+  if (!user) return <Navigate to="/join" replace />;
 
   const upcomingEvents = events.filter((e: any) => !isPast(new Date(e.starts_at)));
   const pastEvents = events.filter((e: any) => isPast(new Date(e.starts_at)));

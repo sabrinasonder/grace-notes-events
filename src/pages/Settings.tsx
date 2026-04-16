@@ -1,383 +1,198 @@
-import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Phone, Bell, Check, Loader2, Shield, LogOut } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
+import {
+  ChevronRight,
+  LogOut,
+  User,
+  CreditCard,
+  Bell,
+  Users,
+  HelpCircle,
+  UserPlus,
+  Archive,
+  ShieldCheck,
+} from "lucide-react";
 import { BottomNav } from "@/components/BottomNav";
+
+const formatCollected = (cents: number) => {
+  const d = cents / 100;
+  if (d >= 1000) return `$${(d / 1000).toFixed(1)}k`;
+  return `$${d.toFixed(0)}`;
+};
 
 const Settings = () => {
   const { user, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
 
-  const [phone, setPhone] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [isSavingName, setIsSavingName] = useState(false);
-  const [verificationCode, setVerificationCode] = useState("");
-  const [verifyStep, setVerifyStep] = useState<"idle" | "sent" | "verifying">("idle");
-  const [isSavingPhone, setIsSavingPhone] = useState(false);
-
-  // Fetch profile
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", user!.id)
         .maybeSingle();
-      if (error) throw error;
       return data;
     },
     enabled: !!user,
   });
 
-  // Fetch notification preferences
-  const { data: prefs } = useQuery({
-    queryKey: ["notification_prefs", user?.id],
+  const { data: isAdmin } = useQuery({
+    queryKey: ["is_admin", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("notification_preferences")
-        .select("*")
-        .eq("user_id", user!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data || {
-        email_reminders: true,
-        sms_reminders: true,
-        host_announcements_email: true,
-        host_announcements_sms: true,
-      };
+      const { data } = await (supabase as any).rpc("has_role", { user_id: user!.id, role: "admin" });
+      return !!data;
     },
     enabled: !!user,
   });
 
-  useEffect(() => {
-    if (profile?.phone) setPhone(profile.phone);
-    if (profile?.full_name) setFullName(profile.full_name);
-  }, [profile]);
+  const { data: stats } = useQuery({
+    queryKey: ["settings_stats", user?.id],
+    queryFn: async () => {
+      const [
+        { count: hosted },
+        { count: attended },
+        { data: hostedWithPayments },
+      ] = await Promise.all([
+        supabase
+          .from("events")
+          .select("*", { count: "exact", head: true })
+          .eq("host_id", user!.id),
+        supabase
+          .from("rsvps")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", user!.id)
+          .eq("status", "going"),
+        supabase
+          .from("events")
+          .select("payments(amount_cents, status)")
+          .eq("host_id", user!.id),
+      ]);
+      const collected = (hostedWithPayments ?? [])
+        .flatMap((e: any) => e.payments ?? [])
+        .filter((p: any) => p.status === "completed")
+        .reduce((sum: number, p: any) => sum + p.amount_cents, 0);
+      return { hosted: hosted ?? 0, attended: attended ?? 0, collected };
+    },
+    enabled: !!user,
+  });
 
-  const handleSaveName = async () => {
-    if (!fullName.trim() || !user) return;
-    setIsSavingName(true);
-    try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ full_name: fullName.trim() })
-        .eq("id", user.id);
-      if (error) throw error;
-      queryClient.invalidateQueries({ queryKey: ["profile", user.id] });
-      toast({ title: "Name updated!" });
-    } catch (err: any) {
-      toast({ title: "Failed", description: err.message, variant: "destructive" });
-    } finally {
-      setIsSavingName(false);
-    }
-  };
-
-  const handleSendVerification = async () => {
-    if (!phone.trim()) return;
-    const cleaned = phone.startsWith("+") ? phone : `+1${phone.replace(/\D/g, "")}`;
-    if (!/^\+[1-9]\d{1,14}$/.test(cleaned)) {
-      toast({ title: "Invalid phone number", description: "Use format: +15551234567", variant: "destructive" });
-      return;
-    }
-    setPhone(cleaned);
-    setIsSavingPhone(true);
-    try {
-      const { error, data } = await supabase.functions.invoke("send-phone-verification", {
-        body: { phone: cleaned },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      setVerifyStep("sent");
-      toast({ title: "Verification code sent", description: `We sent a code to ${cleaned}` });
-    } catch (err: any) {
-      toast({ title: "Failed to send code", description: err.message, variant: "destructive" });
-    } finally {
-      setIsSavingPhone(false);
-    }
-  };
-
-  const handleVerifyCode = async () => {
-    if (!verificationCode.trim()) return;
-    setVerifyStep("verifying");
-    try {
-      const { error, data } = await supabase.functions.invoke("verify-phone-code", {
-        body: { phone, code: verificationCode },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      queryClient.invalidateQueries({ queryKey: ["profile", user!.id] });
-      setVerifyStep("idle");
-      setVerificationCode("");
-      toast({ title: "Phone verified!", description: "You'll receive SMS notifications for your events." });
-    } catch (err: any) {
-      toast({ title: "Incorrect code", description: err.message, variant: "destructive" });
-      setVerifyStep("sent");
-    }
-  };
-
-  const togglePref = async (field: string, value: boolean) => {
-    if (!user) return;
-    try {
-      // Check if prefs row exists
-      const { data: existing } = await supabase
-        .from("notification_preferences")
-        .select("id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (existing) {
-        const { error } = await supabase
-          .from("notification_preferences")
-          .update({ [field]: value } as any)
-          .eq("user_id", user.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("notification_preferences")
-          .insert({
-            user_id: user.id,
-            email_reminders: true,
-            sms_reminders: true,
-            host_announcements_email: true,
-            host_announcements_sms: true,
-            ...({ [field]: value } as any),
-          } as any);
-        if (error) throw error;
-      }
-      queryClient.invalidateQueries({ queryKey: ["notification_prefs", user.id] });
-    } catch (err: any) {
-      toast({ title: "Failed to update", description: err.message, variant: "destructive" });
-    }
-  };
-
-  if (authLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
+  if (authLoading) return null;
   if (!user) {
-    navigate("/welcome");
+    navigate("/join");
     return null;
   }
 
+  const initials = (profile?.full_name || user.email || "?")
+    .split(" ")
+    .map((w: string) => w[0])
+    .join("")
+    .substring(0, 2)
+    .toUpperCase();
+
+  const memberYear = profile?.created_at
+    ? `'${new Date(profile.created_at).getFullYear().toString().slice(2)}`
+    : null;
+
+  const menuItems = [
+    { label: "Account", icon: User, path: "/settings/account" },
+    { label: "Payment methods", icon: CreditCard, path: "/settings/payment" },
+    { label: "Notifications", icon: Bell, path: "/settings/notifications" },
+    { label: "Your circle", icon: Users, path: "/settings/circle" },
+    { label: "Archive", icon: Archive, path: "/archive" },
+    { label: "Invite a friend", icon: UserPlus, path: "/invite" },
+    { label: "Help & feedback", icon: HelpCircle, path: "/settings/help" },
+    ...(isAdmin ? [{ label: "Member approvals", icon: ShieldCheck, path: "/admin/members" }] : []),
+  ];
+
   return (
     <div className="min-h-screen bg-background pb-24">
-      {/* Header */}
-      <div className="border-b border-border bg-background/80 backdrop-blur-lg sticky top-0 z-20">
-        <div className="mx-auto max-w-lg flex items-center gap-3 px-5 py-4">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-card border border-border"
-          >
-            <ArrowLeft className="h-4 w-4 text-foreground" strokeWidth={1.5} />
-          </button>
-          <h1 className="font-display text-xl text-foreground">Settings</h1>
+      {/* Profile header */}
+      <div className="mx-auto max-w-lg px-6 pt-14 pb-8 flex flex-col items-center text-center">
+        <div className="h-20 w-20 rounded-full bg-blush flex items-center justify-center mb-5 overflow-hidden">
+          {profile?.avatar_url ? (
+            <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="font-serif text-2xl text-white">{initials}</span>
+          )}
         </div>
+        <h1 className="font-serif text-[28px] leading-tight text-espresso mb-1.5">
+          {profile?.full_name || user.email}
+        </h1>
+        {(profile?.city || memberYear) && (
+          <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.25em] text-taupe">
+            {[profile?.city, memberYear ? `Member since ${memberYear}` : null]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        )}
       </div>
 
-      <div className="mx-auto max-w-lg px-5 mt-6 space-y-8">
-        {/* Profile info */}
-        <div className="space-y-3">
-          <h2 className="label-meta text-muted-foreground">Account</h2>
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
-            {profile?.full_name && (
-              <p className="font-serif text-lg text-foreground">{profile.full_name}</p>
-            )}
-            <p className="text-xs text-muted-foreground">{user.email}</p>
-            <div className="space-y-1.5">
-              <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                Display Name
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Your name"
-                  className="flex-1 rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-                <button
-                  onClick={handleSaveName}
-                  disabled={!fullName.trim() || fullName === profile?.full_name || isSavingName}
-                  className="rounded-xl bg-primary px-4 py-2.5 transition-all hover:opacity-90 disabled:opacity-50"
-                >
-                  {isSavingName ? (
-                    <Loader2 className="h-4 w-4 text-primary-foreground animate-spin" />
-                  ) : (
-                    <Check className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
-                  )}
-                </button>
-              </div>
+      {/* Stats row */}
+      <div className="mx-auto max-w-lg px-6 pb-8">
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { value: stats?.hosted ?? "—", label: "Hosted" },
+            { value: stats?.attended ?? "—", label: "Attended" },
+            {
+              value: stats != null ? formatCollected(stats.collected) : "—",
+              label: "Collected",
+            },
+          ].map(({ value, label }) => (
+            <div
+              key={label}
+              className="rounded-2xl bg-paper border border-cream py-4 text-center"
+            >
+              <p className="font-serif text-2xl text-espresso">{value}</p>
+              <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.22em] text-taupe mt-1">
+                {label}
+              </p>
             </div>
-          </div>
-        </div>
-
-        {/* Phone number */}
-        <div className="space-y-3">
-          <h2 className="label-meta text-muted-foreground">Phone Number</h2>
-          <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Add your number to get text reminders for events you're going to. We'll never text you about anything else.
-            </p>
-
-            {profile?.phone_verified ? (
-              <div className="flex items-center gap-2 rounded-xl bg-sage/10 px-3 py-2.5">
-                <Check className="h-4 w-4 text-sage" strokeWidth={1.5} />
-                <span className="text-sm text-foreground">{profile.phone}</span>
-                <span className="ml-auto pill-tag bg-sage text-sage-foreground">Verified</span>
-              </div>
-            ) : (
-              <>
-                <div className="flex gap-2">
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+15551234567"
-                    className="flex-1 rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                  <button
-                    onClick={handleSendVerification}
-                    disabled={!phone.trim() || isSavingPhone}
-                    className="rounded-xl bg-primary px-4 py-2.5 transition-all hover:opacity-90 disabled:opacity-50"
-                  >
-                    {isSavingPhone ? (
-                      <Loader2 className="h-4 w-4 text-primary-foreground animate-spin" />
-                    ) : (
-                      <Phone className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
-                    )}
-                  </button>
-                </div>
-
-                {verifyStep === "sent" && (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={verificationCode}
-                      onChange={(e) => setVerificationCode(e.target.value)}
-                      placeholder="Enter 6-digit code"
-                      maxLength={6}
-                      className="flex-1 rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary text-center tracking-widest"
-                    />
-                    <button
-                      onClick={handleVerifyCode}
-                      disabled={verificationCode.length < 4}
-                      className="rounded-xl bg-primary px-4 py-2.5 transition-all hover:opacity-90 disabled:opacity-50"
-                    >
-                      <Shield className="h-4 w-4 text-primary-foreground" strokeWidth={1.5} />
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Notification preferences */}
-        <div className="space-y-3">
-          <h2 className="label-meta text-muted-foreground">Notifications</h2>
-          <div className="rounded-2xl border border-border bg-card divide-y divide-border">
-            <NotifToggle
-              label="Email reminders"
-              description="48h and morning-of event reminders"
-              icon={<Bell className="h-4 w-4" strokeWidth={1.5} />}
-              checked={prefs?.email_reminders ?? true}
-              onChange={(v) => togglePref("email_reminders", v)}
-            />
-            <NotifToggle
-              label="SMS reminders"
-              description="Text reminders before events"
-              icon={<Phone className="h-4 w-4" strokeWidth={1.5} />}
-              checked={prefs?.sms_reminders ?? true}
-              onChange={(v) => togglePref("sms_reminders", v)}
-              disabled={!profile?.phone_verified}
-            />
-            <NotifToggle
-              label="Host updates (email)"
-              description="When hosts post announcements"
-              icon={<Bell className="h-4 w-4" strokeWidth={1.5} />}
-              checked={prefs?.host_announcements_email ?? true}
-              onChange={(v) => togglePref("host_announcements_email", v)}
-            />
-            <NotifToggle
-              label="Host updates (SMS)"
-              description="Text when hosts post updates"
-              icon={<Phone className="h-4 w-4" strokeWidth={1.5} />}
-              checked={prefs?.sms_reminders ?? true}
-              onChange={(v) => togglePref("host_announcements_sms", v)}
-              disabled={!profile?.phone_verified}
-            />
-          </div>
-        </div>
-
-        {/* Sign out */}
-        <div className="space-y-3">
-          <button
-            onClick={async () => {
-              await signOut();
-              navigate("/welcome");
-            }}
-            className="w-full flex items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3.5 transition-colors hover:bg-cream"
-          >
-            <LogOut className="h-4 w-4 text-destructive" strokeWidth={1.5} />
-            <span className="text-sm font-semibold text-destructive">Sign Out</span>
-          </button>
+          ))}
         </div>
       </div>
+
+      {/* Menu list */}
+      <div className="mx-auto max-w-lg px-6">
+        <div className="divide-y divide-cream">
+          {menuItems.map(({ label, icon: Icon, path }) => (
+            <button
+              key={path}
+              onClick={() => navigate(path)}
+              className="flex w-full items-center gap-3 py-4 text-left group"
+            >
+              <Icon
+                className="h-4 w-4 text-taupe shrink-0"
+                strokeWidth={1.5}
+              />
+              <span className="flex-1 font-sans text-[15px] text-espresso">
+                {label}
+              </span>
+              <ChevronRight className="h-4 w-4 text-taupe" strokeWidth={1.5} />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Sign out */}
+      <div className="mx-auto max-w-lg px-6 mt-8">
+        <button
+          onClick={async () => {
+            await signOut();
+            navigate("/join");
+          }}
+          className="flex w-full items-center gap-2 rounded-2xl border border-cream bg-paper px-4 py-3.5 transition-colors hover:bg-cream"
+        >
+          <LogOut className="h-4 w-4 text-destructive" strokeWidth={1.5} />
+          <span className="text-sm font-semibold text-destructive">Sign out</span>
+        </button>
+      </div>
+
       <BottomNav />
     </div>
   );
 };
-
-// Toggle sub-component
-const NotifToggle = ({
-  label,
-  description,
-  icon,
-  checked,
-  onChange,
-  disabled = false,
-}: {
-  label: string;
-  description: string;
-  icon: React.ReactNode;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  disabled?: boolean;
-}) => (
-  <div className={cn("flex items-center gap-3 px-4 py-3.5", disabled && "opacity-50")}>
-    <div className="text-muted-foreground">{icon}</div>
-    <div className="flex-1 min-w-0">
-      <p className="text-sm font-medium text-foreground">{label}</p>
-      <p className="text-xs text-muted-foreground">{description}</p>
-    </div>
-    <button
-      onClick={() => !disabled && onChange(!checked)}
-      disabled={disabled}
-      className={cn(
-        "relative h-6 w-11 rounded-full transition-colors",
-        checked ? "bg-primary" : "bg-border"
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 h-5 w-5 rounded-full bg-background shadow-sm transition-all",
-          checked ? "left-[22px]" : "left-0.5"
-        )}
-      />
-    </button>
-  </div>
-);
 
 export default Settings;

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Sonder Circle</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+
+      body {
+        background: #FAF6EE;
+        color: #3A2A20;
+        font-family: Georgia, 'Times New Roman', serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100svh;
+        padding: 2.5rem 2rem;
+        text-align: center;
+      }
+
+      .icon {
+        width: 72px;
+        height: 72px;
+        border-radius: 18px;
+        background: #3A2010;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 2rem;
+        font-size: 1.6rem;
+        color: #FAF6EE;
+        letter-spacing: 2px;
+      }
+
+      h1 {
+        font-size: 1.6rem;
+        font-weight: 400;
+        color: #3A2A20;
+        margin-bottom: 0.6rem;
+        letter-spacing: 0.01em;
+      }
+
+      p {
+        font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+        font-size: 0.85rem;
+        color: #8B7D72;
+        line-height: 1.65;
+        max-width: 260px;
+        margin-bottom: 2.5rem;
+      }
+
+      button {
+        background: transparent;
+        border: 1px solid #D4C8BC;
+        border-radius: 9999px;
+        padding: 0.75rem 2.25rem;
+        font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+        font-size: 0.65rem;
+        font-weight: 600;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: #3A2A20;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      button:active {
+        background: #F0EBE2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="icon">SC</div>
+    <h1>You're offline</h1>
+    <p>Check your connection and try again. Your events and photos will be waiting.</p>
+    <button onclick="window.location.reload()">Try again</button>
+  </body>
+</html>

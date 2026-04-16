@@ -8,10 +8,15 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// storageKey is set explicitly so the client always reads the right
+// localStorage entry regardless of how the URL is parsed internally.
+// Format: sb-{project-ref}-auth-token
+const PROJECT_REF = SUPABASE_URL.replace("https://", "").replace(".supabase.co", "");
+
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
-  }
+    storageKey: `sb-${PROJECT_REF}-auth-token`,
+  },
 });

@@ -48,7 +48,7 @@ BEGIN
   PERFORM cron.schedule(
     'process-email-queue',
     '5 seconds',
-    $$
+    $cron$
     SELECT net.http_post(
       url     => (
         SELECT decrypted_secret
@@ -67,7 +67,7 @@ BEGIN
         )
       )
     )
-    $$
+    $cron$
   );
 
   RETURN 'scheduled: process-email-queue (every 5 seconds)';
