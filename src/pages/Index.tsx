@@ -97,7 +97,7 @@ const Index = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("events")
-        .select("*, profiles!events_host_id_fkey(full_name, avatar_url), rsvps(id, status)")
+        .select("*, profiles!events_host_id_fkey(full_name, avatar_url), rsvps(id, status), event_hosts(user_id, profiles!event_hosts_user_id_fkey(full_name, avatar_url))")
         .gte("starts_at", new Date().toISOString())
         .eq("status", "active")
         .order("starts_at", { ascending: true });
@@ -181,22 +181,41 @@ const Index = () => {
     return events.filter((e: any) => myRsvpEventIds.has(e.id));
   }, [events, mode, user?.id, myRsvpEventIds]);
 
+  // For recurring series, only show the next upcoming instance (events are already sorted ASC)
+  const deduplicatedEvents = useMemo(() => {
+    const seriesSeen = new Set<string>();
+    const result: any[] = [];
+    for (const event of filteredEvents) {
+      const isRecurring = !!(event.is_recurring_parent || event.parent_event_id);
+      if (!isRecurring) {
+        result.push(event);
+        continue;
+      }
+      const seriesId: string = event.parent_event_id ?? event.id;
+      if (!seriesSeen.has(seriesId)) {
+        seriesSeen.add(seriesId);
+        result.push(event);
+      }
+    }
+    return result;
+  }, [filteredEvents]);
+
   // Group events
   const now = new Date();
   const endOfWeek = addDays(now, 7);
-  const todayEvents = filteredEvents.filter((e: any) => isToday(new Date(e.starts_at)));
-  const thisWeekEvents = filteredEvents.filter((e: any) => {
+  const todayEvents = deduplicatedEvents.filter((e: any) => isToday(new Date(e.starts_at)));
+  const thisWeekEvents = deduplicatedEvents.filter((e: any) => {
     const d = new Date(e.starts_at);
     return !isToday(d) && isBefore(d, endOfWeek);
   });
-  const comingUpEvents = filteredEvents.filter((e: any) => !isBefore(new Date(e.starts_at), endOfWeek));
+  const comingUpEvents = deduplicatedEvents.filter((e: any) => !isBefore(new Date(e.starts_at), endOfWeek));
 
   // Activity summary
-  const hostingCount = events.filter((e: any) => e.host_id === user?.id).length;
+  const hostingCount = deduplicatedEvents.filter((e: any) => e.host_id === user?.id).length;
   const pendingCount = pendingRequests.filter((r: any) =>
     events.some((e: any) => e.id === r.event_id && e.host_id === user?.id)
   ).length;
-  const attendingCount = events.filter((e: any) => myRsvpEventIds.has(e.id)).length;
+  const attendingCount = deduplicatedEvents.filter((e: any) => myRsvpEventIds.has(e.id)).length;
 
   if (loading) {
     return (
@@ -213,6 +232,19 @@ const Index = () => {
   const renderEventCard = (event: any) => {
     const goingCount = event.rsvps?.filter((r: any) => r.status === "going").length || 0;
     const hostProfile = event.profiles;
+    const coHosts: any[] = event.event_hosts || [];
+    const allHosts = coHosts.length > 0
+      ? coHosts.map((h: any) => h.profiles).filter(Boolean)
+      : [hostProfile].filter(Boolean);
+    const hostFirstNames = allHosts.map((h: any) => (h?.full_name || "Host").split(" ")[0]);
+    const hostDisplayName = hostFirstNames.length === 0
+      ? "Host"
+      : hostFirstNames.length === 1
+        ? allHosts[0]?.full_name || "Host"
+        : hostFirstNames.length === 2
+          ? `${hostFirstNames[0]} & ${hostFirstNames[1]}`
+          : `${hostFirstNames[0]}, ${hostFirstNames[1]} +${hostFirstNames.length - 2}`;
+    const primaryHost = allHosts[0] ?? hostProfile;
     const eventDate = new Date(event.starts_at);
     const isHost = event.host_id === user?.id;
     const hasRsvp = myRsvpEventIds.has(event.id);
@@ -230,7 +262,7 @@ const Index = () => {
         {/* Hero zone */}
         <div className="relative h-44 w-full overflow-hidden">
           {event.cover_image_url ? (
-            <img src={event.cover_image_url} alt={event.title} className="h-full w-full object-cover" />
+            <img src={event.cover_image_url} alt={event.title} className="h-full w-full object-cover" style={{ objectPosition: (event as any).cover_image_position || "50% 50%" }} />
           ) : (
             <div className="h-full w-full" style={{ background: getGradient(event.id) }} />
           )}
@@ -311,15 +343,15 @@ const Index = () => {
         {/* Bottom attribution zone */}
         <div className="flex items-center justify-between border-t border-cream px-5 py-4">
           <div className="flex items-center gap-2.5">
-            {hostProfile?.avatar_url ? (
-              <img src={hostProfile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover" />
+            {primaryHost?.avatar_url ? (
+              <img src={primaryHost.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover" />
             ) : (
               <div className="h-7 w-7 rounded-full bg-blush/30 flex items-center justify-center font-serif text-[9px] text-espresso">
-                {(hostProfile?.full_name || "?").split(" ").map((w: string) => w[0]).join("").substring(0, 2).toUpperCase()}
+                {(primaryHost?.full_name || "?").split(" ").map((w: string) => w[0]).join("").substring(0, 2).toUpperCase()}
               </div>
             )}
             <div className="flex flex-col">
-              <span className="font-sans text-xs font-semibold text-cocoa">{hostProfile?.full_name || "Host"}</span>
+              <span className="font-sans text-xs font-semibold text-cocoa">{hostDisplayName}</span>
               {event.location && (
                 <span className="font-sans text-[11px] text-taupe truncate max-w-[180px]">{event.location.split(",")[0]}</span>
               )}
@@ -420,7 +452,7 @@ const Index = () => {
                     >
                       <div className="relative h-full w-full">
                         {event.cover_image_url ? (
-                          <img src={event.cover_image_url} alt={event.title} className="h-full w-full object-cover" />
+                          <img src={event.cover_image_url} alt={event.title} className="h-full w-full object-cover" style={{ objectPosition: (event as any).cover_image_position || "50% 50%" }} />
                         ) : (
                           <div className="h-full w-full" style={{ background: getGradient(event.id) }} />
                         )}

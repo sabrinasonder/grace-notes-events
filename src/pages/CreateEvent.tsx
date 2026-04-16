@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth";
 import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { ArrowLeft, CalendarIcon, Home, ImagePlus, Lock, UserCheck, Globe, UserPlus, X, Search, Repeat } from "lucide-react";
+import { Camera, CalendarIcon, MapPin, Users, DollarSign, ChevronRight, Lock, UserCheck, Globe, UserPlus, X, Search, Repeat, Bell, ExternalLink } from "lucide-react";
 import {
   type RecurrenceType,
   type MonthlyMode,
@@ -52,15 +52,27 @@ const CreateEvent = () => {
   const [location, setLocation] = useState("");
   const [capacity, setCapacity] = useState("");
   const [priceDollars, setPriceDollars] = useState("");
+  const [externalPaymentLink, setExternalPaymentLink] = useState("");
   const [autoReminders, setAutoReminders] = useState(true);
   const [privacy, setPrivacy] = useState<EventPrivacy>("invite_only");
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [coverPosition, setCoverPosition] = useState<{ x: number; y: number }>({ x: 50, y: 50 });
+  const [isAdjustingCover, setIsAdjustingCover] = useState(false);
+  const adjustContainerRef = useRef<HTMLDivElement>(null);
+  const dragStartRef = useRef<{ clientX: number; clientY: number; posX: number; posY: number } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loadingEvent, setLoadingEvent] = useState(!!editId);
   const [initialGuestIds, setInitialGuestIds] = useState<string[]>([]);
   const [showGuestPicker, setShowGuestPicker] = useState(false);
   const [guestSearch, setGuestSearch] = useState("");
+  const [cohostIds, setCohostIds] = useState<string[]>([]);
+  const [removedCohostIds, setRemovedCohostIds] = useState<string[]>([]);
+  const [existingCohosts, setExistingCohosts] = useState<{ id: string; user_id: string; full_name: string; avatar_url: string | null; role: string }[]>([]);
+  const [showCohostPicker, setShowCohostPicker] = useState(false);
+  const [cohostSearch, setCohostSearch] = useState("");
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [dateTimeOpen, setDateTimeOpen] = useState(false);
 
   const { data: allMembers = [] } = useQuery({
     queryKey: ["all_members_create"],
@@ -71,7 +83,7 @@ const CreateEvent = () => {
         .order("full_name");
       return data || [];
     },
-    enabled: showGuestPicker,
+    enabled: showGuestPicker || showCohostPicker,
   });
 
   useEffect(() => {
@@ -93,12 +105,35 @@ const CreateEvent = () => {
       setLocation(data.location || "");
       setCapacity(data.capacity ? String(data.capacity) : "");
       setPriceDollars(data.price_cents ? (data.price_cents / 100).toFixed(2) : "");
+      setExternalPaymentLink((data as any).external_payment_link || "");
       setAutoReminders(data.auto_reminders_enabled);
       setPrivacy(data.privacy);
       const startsAt = new Date(data.starts_at);
       setDate(startsAt);
       setTime(format(startsAt, "HH:mm"));
       if (data.cover_image_url) setCoverPreview(data.cover_image_url);
+      if ((data as any).cover_image_position) {
+        const parts = (data as any).cover_image_position.split(" ");
+        if (parts.length === 2) {
+          setCoverPosition({ x: parseFloat(parts[0]), y: parseFloat(parts[1]) });
+        }
+      }
+      // Load existing co-hosts
+      const { data: hosts } = await (supabase as any)
+        .from("event_hosts")
+        .select("id, user_id, role, profiles!event_hosts_user_id_fkey(full_name, avatar_url)")
+        .eq("event_id", editId);
+      if (hosts) {
+        setExistingCohosts(
+          hosts.map((h: any) => ({
+            id: h.id,
+            user_id: h.user_id,
+            full_name: h.profiles?.full_name || "Member",
+            avatar_url: h.profiles?.avatar_url ?? null,
+            role: h.role,
+          }))
+        );
+      }
       setLoadingEvent(false);
     };
     loadEvent();
@@ -119,6 +154,42 @@ const CreateEvent = () => {
     if (!file) return;
     setCoverFile(file);
     setCoverPreview(URL.createObjectURL(file));
+    setCoverPosition({ x: 50, y: 50 });
+  };
+
+  const handleAdjustPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Don't capture if the user tapped a button (e.g. Done)
+    if ((e.target as HTMLElement).closest("button")) return;
+    e.preventDefault();
+    dragStartRef.current = {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      posX: coverPosition.x,
+      posY: coverPosition.y,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handleAdjustPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragStartRef.current || !adjustContainerRef.current) return;
+    const rect = adjustContainerRef.current.getBoundingClientRect();
+    const dx = e.clientX - dragStartRef.current.clientX;
+    const dy = e.clientY - dragStartRef.current.clientY;
+    // Dragging right moves the image right → shows more of the left → decrease x
+    const newX = Math.max(0, Math.min(100, dragStartRef.current.posX - (dx / rect.width) * 100));
+    const newY = Math.max(0, Math.min(100, dragStartRef.current.posY - (dy / rect.height) * 100));
+    setCoverPosition({ x: newX, y: newY });
+  };
+
+  const handleAdjustPointerUp = () => {
+    dragStartRef.current = null;
+  };
+
+  const formatTime = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -148,6 +219,8 @@ const CreateEvent = () => {
       }
 
       const priceCents = priceDollars ? Math.round(parseFloat(priceDollars) * 100) : 0;
+      const positionStr = `${coverPosition.x.toFixed(1)}% ${coverPosition.y.toFixed(1)}%`;
+      const extLink = externalPaymentLink.trim() || null;
 
       if (editId) {
         const updatePayload = {
@@ -159,7 +232,9 @@ const CreateEvent = () => {
           price_cents: priceCents,
           auto_reminders_enabled: autoReminders,
           privacy,
+          external_payment_link: priceCents > 0 ? extLink : null,
           ...(coverUrl !== undefined ? { cover_image_url: coverUrl } : {}),
+          ...(coverPreview ? { cover_image_position: positionStr } : {}),
         };
         const { error } = await supabase.from("events").update(updatePayload).eq("id", editId);
         if (error) throw error;
@@ -172,7 +247,7 @@ const CreateEvent = () => {
             .eq("parent_event_id", editId)
             .gte("starts_at", fromDate)
             .eq("status", "active");
-          (supabase as any).rpc("generate_recurring_instances").catch(() => {});
+          (supabase as any).rpc("generate_recurring_instances");
         } else if (recurEditMode === "all") {
           // Propagate metadata changes to all existing instances
           const instancePayload = {
@@ -184,11 +259,31 @@ const CreateEvent = () => {
             auto_reminders_enabled: autoReminders,
             privacy,
             ...(coverUrl !== undefined ? { cover_image_url: coverUrl } : {}),
+            ...(coverPreview ? { cover_image_position: positionStr } : {}),
           };
           await (supabase as any)
             .from("events")
             .update(instancePayload)
             .eq("parent_event_id", editId);
+        }
+
+        // Apply co-host changes
+        if (removedCohostIds.length > 0) {
+          await (supabase as any)
+            .from("event_hosts")
+            .delete()
+            .eq("event_id", editId)
+            .in("user_id", removedCohostIds);
+        }
+        if (cohostIds.length > 0) {
+          await (supabase as any).from("event_hosts").insert(
+            cohostIds.map((uid) => ({
+              event_id: editId,
+              user_id: uid,
+              role: "co-host",
+              added_by: user.id,
+            }))
+          );
         }
 
         toast({ title: "Event updated!" });
@@ -215,10 +310,12 @@ const CreateEvent = () => {
             title,
             description: description || null,
             cover_image_url: coverUrl ?? null,
+            cover_image_position: positionStr,
             starts_at: startsAt.toISOString(),
             location: location || null,
             capacity: capacity ? parseInt(capacity) : null,
             price_cents: priceCents,
+            external_payment_link: priceCents > 0 ? extLink : null,
             auto_reminders_enabled: autoReminders,
             privacy,
             ...recurrencePayload,
@@ -229,9 +326,19 @@ const CreateEvent = () => {
 
         if (isRecurring) {
           // Fire and forget — generates next 3 months of instances
-          (supabase as any).rpc("generate_recurring_instances").catch(() => {});
+          (supabase as any).rpc("generate_recurring_instances");
         }
 
+        if (cohostIds.length > 0) {
+          await (supabase as any).from("event_hosts").insert(
+            cohostIds.map((uid) => ({
+              event_id: data.id,
+              user_id: uid,
+              role: "co-host",
+              added_by: user.id,
+            }))
+          );
+        }
         if (initialGuestIds.length > 0) {
           await supabase.from("event_invites").insert(
             initialGuestIds.map((memberId) => ({
@@ -252,181 +359,168 @@ const CreateEvent = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-12">
-      {/* Top bar */}
-      <div className="sticky top-0 z-20 border-b border-cream bg-background/80 backdrop-blur-lg">
-        <div className="mx-auto flex max-w-lg items-center px-6 py-4">
+    <div className="min-h-screen bg-background">
+
+      {/* ── HEADER ── */}
+      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-lg border-b border-cream">
+        <div className="mx-auto flex max-w-lg items-center px-5 py-4">
           <button
+            type="button"
             onClick={() => navigate(-1)}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-cream transition-colors hover:bg-cream/80"
+            className="flex h-9 w-9 items-center justify-center"
           >
-            <ArrowLeft className="h-4 w-4 text-cocoa" strokeWidth={2} />
+            <X className="h-5 w-5 text-cocoa" strokeWidth={1.5} />
           </button>
-          <h1 className="flex-1 text-center font-serif text-lg text-espresso">
-            {editId ? "Edit Event" : "Create Event"}
+          <h1 className="flex-1 text-center font-sans text-[11px] font-semibold uppercase tracking-[0.3em] text-espresso">
+            {editId ? "Edit Event" : "New Event"}
           </h1>
           <button
-            onClick={() => navigate("/")}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-cream transition-colors hover:bg-cream/80"
+            form="event-form"
+            type="submit"
+            disabled={submitting || !title}
+            className="rounded-full bg-espresso px-5 py-2 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-background disabled:opacity-40 transition-opacity"
           >
-            <Home className="h-4 w-4 text-cocoa" strokeWidth={2} />
+            {submitting ? "…" : editId ? "Save" : "Publish"}
           </button>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="mx-auto max-w-lg px-6 pt-8 space-y-7">
-        {/* Cover image */}
-        <label className="block cursor-pointer">
-          <input type="file" accept="image/*" onChange={handleCoverChange} className="hidden" />
-          {coverPreview ? (
-            <div className="relative h-52 rounded-2xl overflow-hidden">
-              <img src={coverPreview} alt="Cover preview" className="h-full w-full object-cover" />
-              <div className="absolute inset-0 bg-black/10 flex items-center justify-center">
-                <span className="rounded-full bg-white/80 px-4 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-cocoa backdrop-blur-sm">
-                  Change Photo
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="flex h-52 items-center justify-center rounded-2xl border-2 border-dashed border-cream bg-paper">
-              <div className="text-center space-y-2">
-                <ImagePlus className="mx-auto h-8 w-8 text-taupe/50" strokeWidth={1.5} />
-                <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">
-                  Add Cover Photo
-                </p>
-              </div>
-            </div>
-          )}
-        </label>
+      <form id="event-form" onSubmit={handleSubmit} className="mx-auto max-w-lg pb-20">
 
-        {/* Title */}
-        <div className="space-y-2">
-          <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">
-            Event Title
-          </label>
+        {/* ── TITLE ── */}
+        <div className="px-6 pt-6 pb-5 border-b border-cream">
+          <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.3em] text-taupe/60 mb-2">Title</p>
           <input
             type="text"
             required
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Full Moon Dinner"
-            className="w-full rounded-xl border border-cream bg-paper px-4 py-3.5 font-serif text-lg text-espresso placeholder:text-taupe/40 focus:border-cocoa focus:outline-none focus:ring-1 focus:ring-cocoa transition-colors"
+            placeholder="Name your gathering"
+            className="w-full bg-transparent font-serif text-[28px] font-light leading-tight text-espresso placeholder:text-[#9faab8] focus:outline-none"
           />
         </div>
 
-        {/* Description */}
-        <div className="space-y-2">
-          <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">
-            Description
-          </label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-            placeholder="What's this gathering about?"
-            className="w-full rounded-xl border border-cream bg-paper px-4 py-3.5 font-serif italic text-sm text-cocoa placeholder:text-taupe/40 placeholder:not-italic focus:border-cocoa focus:outline-none focus:ring-1 focus:ring-cocoa transition-colors resize-none leading-relaxed"
-          />
-        </div>
-
-        {/* Privacy selector */}
-        <div className="space-y-2">
-          <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">Privacy</label>
-          <div className="space-y-2">
-            {PRIVACY_OPTIONS.map((opt) => {
-              const Icon = opt.icon;
-              const selected = privacy === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setPrivacy(opt.value)}
-                  className={cn(
-                    "w-full flex items-center gap-3 rounded-xl border px-4 py-3.5 text-left transition-all",
-                    selected
-                      ? "border-cocoa bg-cocoa/5"
-                      : "border-cream bg-paper hover:border-taupe/30"
-                  )}
-                >
-                  <Icon
-                    className={cn("h-4 w-4 shrink-0", selected ? "text-cocoa" : "text-taupe")}
-                    strokeWidth={1.5}
-                  />
-                  <div className="min-w-0">
-                    <p className={cn("font-sans text-sm font-medium", selected ? "text-espresso" : "text-cocoa")}>
-                      {opt.label}
-                    </p>
-                    <p className="font-sans text-[11px] text-taupe">{opt.desc}</p>
+        {/* ── COVER IMAGE ── */}
+        <div className="px-5 pt-5 pb-2">
+          {coverPreview ? (
+            <div
+              ref={adjustContainerRef}
+              className="relative h-52 rounded-2xl overflow-hidden"
+              style={{ cursor: isAdjustingCover ? "grab" : undefined, touchAction: isAdjustingCover ? "none" : undefined }}
+              onPointerDown={isAdjustingCover ? handleAdjustPointerDown : undefined}
+              onPointerMove={isAdjustingCover ? handleAdjustPointerMove : undefined}
+              onPointerUp={isAdjustingCover ? handleAdjustPointerUp : undefined}
+              onPointerCancel={isAdjustingCover ? handleAdjustPointerUp : undefined}
+            >
+              <img
+                src={coverPreview}
+                alt="Cover preview"
+                className="h-full w-full object-cover pointer-events-none select-none"
+                style={{ objectPosition: `${coverPosition.x}% ${coverPosition.y}%` }}
+                draggable={false}
+              />
+              {isAdjustingCover ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-between py-4 pointer-events-none">
+                  <div className="rounded-full bg-black/50 px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.15em] text-white backdrop-blur-sm">
+                    Drag to reposition
                   </div>
-                  <div
-                    className={cn(
-                      "ml-auto h-4 w-4 shrink-0 rounded-full border-2 transition-colors",
-                      selected ? "border-cocoa bg-cocoa" : "border-taupe/40"
-                    )}
+                  <button
+                    type="button"
+                    className="pointer-events-auto rounded-full bg-white/90 px-5 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-cocoa shadow"
+                    onClick={() => setIsAdjustingCover(false)}
                   >
-                    {selected && (
-                      <div className="h-full w-full flex items-center justify-center">
-                        <div className="h-1.5 w-1.5 rounded-full bg-background" />
-                      </div>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Date + Time */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
-            <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">Date</label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className={cn(
-                    "w-full rounded-xl border border-cream bg-paper px-4 py-3.5 text-left text-sm font-sans transition-colors",
-                    date ? "text-espresso" : "text-taupe/40"
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <CalendarIcon className="h-4 w-4 text-blush" strokeWidth={1.5} />
-                    {date ? format(date, "MMM d, yyyy") : "Pick a date"}
-                  </div>
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0 rounded-xl" align="start">
-                <Calendar
-                  mode="single"
-                  selected={date}
-                  onSelect={setDate}
-                  initialFocus
-                  className={cn("p-3 pointer-events-auto")}
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          <div className="space-y-2">
-            <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">Time</label>
-            <input
-              type="time"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-              className="w-full rounded-xl border border-cream bg-paper px-4 py-3.5 text-sm font-sans text-espresso focus:border-cocoa focus:outline-none focus:ring-1 focus:ring-cocoa transition-colors"
-            />
-          </div>
-        </div>
-
-        {/* Repeats (new events only) */}
-        {!editId && (
-          <div className="space-y-3">
-            <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe flex items-center gap-1.5">
-              <Repeat className="h-3 w-3" strokeWidth={1.5} />
-              Repeats
+                    Done
+                  </button>
+                </div>
+              ) : (
+                <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+                  <label className="cursor-pointer rounded-full bg-black/40 backdrop-blur-sm px-3 py-1.5">
+                    <input type="file" accept="image/*" onChange={handleCoverChange} className="hidden" />
+                    <span className="font-sans text-[10px] font-semibold uppercase tracking-[0.18em] text-white">Change</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsAdjustingCover(true)}
+                    className="rounded-full bg-black/40 backdrop-blur-sm px-3 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.18em] text-white"
+                  >
+                    Reposition
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <label className="block cursor-pointer">
+              <input type="file" accept="image/*" onChange={handleCoverChange} className="hidden" />
+              <div className="flex h-44 items-center justify-center rounded-2xl bg-cream/60">
+                <div className="text-center space-y-2.5">
+                  <Camera className="mx-auto h-6 w-6 text-taupe/50" strokeWidth={1.5} />
+                  <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.3em] text-taupe/60">
+                    Add Cover
+                  </p>
+                </div>
+              </div>
             </label>
+          )}
+        </div>
 
-            {/* Frequency options */}
-            <div className="grid grid-cols-2 gap-2">
+        {/* ── DATE & TIME ── */}
+        <div className="border-b border-cream">
+          <button
+            type="button"
+            onClick={() => setDateTimeOpen(!dateTimeOpen)}
+            className="flex w-full items-center gap-4 px-6 py-4 transition-colors active:bg-cream/40"
+          >
+            <CalendarIcon className="h-[18px] w-[18px] shrink-0 text-blush" strokeWidth={1.5} />
+            <div className="flex-1 text-left">
+              <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.3em] text-taupe/60">Date &amp; Time</p>
+              <p className={cn("font-sans text-[15px] font-semibold mt-0.5", date ? "text-espresso" : "text-cocoa")}>
+                {date ? `${format(date, "EEE, MMM d, yyyy")} · ${formatTime(time)}` : "Choose…"}
+              </p>
+            </div>
+            <ChevronRight
+              className={cn("h-4 w-4 text-taupe/40 transition-transform duration-200", dateTimeOpen && "rotate-90")}
+              strokeWidth={1.5}
+            />
+          </button>
+          {dateTimeOpen && (
+            <div className="px-5 pb-5 space-y-4 border-t border-cream/50">
+              <Calendar
+                mode="single"
+                selected={date}
+                onSelect={(d) => setDate(d)}
+                initialFocus
+                className="pointer-events-auto mx-auto"
+              />
+              <div className="flex items-center gap-4 px-1">
+                <span className="font-sans text-[9px] font-semibold uppercase tracking-[0.3em] text-taupe/60 w-8 shrink-0">
+                  Time
+                </span>
+                <input
+                  type="time"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                  className="flex-1 rounded-xl bg-cream/60 px-4 py-2.5 font-sans text-sm text-espresso focus:outline-none"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setDateTimeOpen(false)}
+                className="w-full rounded-full bg-espresso py-2.5 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-background"
+              >
+                Done
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ── REPEATS — only after date is picked, new events only ── */}
+        {!editId && date && (
+          <div className="border-b border-cream px-6 py-4 space-y-3">
+            <div className="flex items-center gap-4">
+              <Repeat className="h-[18px] w-[18px] shrink-0 text-blush" strokeWidth={1.5} />
+              <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.3em] text-taupe/60">Repeats</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pl-[34px]">
               {(
                 [
                   { value: "none", label: "Does not repeat" },
@@ -440,10 +534,10 @@ const CreateEvent = () => {
                   type="button"
                   onClick={() => setRecurrenceType(value)}
                   className={cn(
-                    "rounded-xl border px-3 py-2.5 text-left font-sans text-sm transition-all",
+                    "rounded-full border px-3 py-2 font-sans text-[11px] font-semibold transition-all text-center",
                     recurrenceType === value
-                      ? "border-cocoa bg-cocoa/5 text-espresso"
-                      : "border-cream bg-paper text-cocoa hover:border-taupe/30"
+                      ? "border-espresso bg-espresso text-background"
+                      : "border-cream bg-paper text-cocoa hover:border-taupe/40"
                   )}
                 >
                   {label}
@@ -451,9 +545,8 @@ const CreateEvent = () => {
               ))}
             </div>
 
-            {/* Monthly sub-option */}
-            {recurrenceType === "monthly" && date && (
-              <div className="space-y-2 pl-1">
+            {recurrenceType === "monthly" && (
+              <div className="space-y-2 pl-[34px]">
                 {(
                   [
                     { value: "same_day", label: describeRecurrence(date, "monthly", "same_day") },
@@ -465,41 +558,34 @@ const CreateEvent = () => {
                     type="button"
                     onClick={() => setMonthlyMode(value)}
                     className={cn(
-                      "flex items-center gap-2.5 rounded-xl border px-3 py-2.5 w-full font-sans text-sm transition-all",
+                      "flex items-center gap-2.5 w-full rounded-full border px-3 py-2 font-sans text-[11px] font-semibold transition-all",
                       monthlyMode === value
-                        ? "border-cocoa bg-cocoa/5 text-espresso"
-                        : "border-cream bg-paper text-cocoa hover:border-taupe/30"
+                        ? "border-espresso bg-espresso text-background"
+                        : "border-cream bg-paper text-cocoa"
                     )}
                   >
-                    <div
-                      className={cn(
-                        "h-3.5 w-3.5 shrink-0 rounded-full border-2 transition-colors",
-                        monthlyMode === value ? "border-cocoa bg-cocoa" : "border-taupe/40"
-                      )}
-                    />
+                    <div className={cn("h-3 w-3 shrink-0 rounded-full border-2", monthlyMode === value ? "border-background bg-background" : "border-taupe/40")} />
                     {label}
                   </button>
                 ))}
               </div>
             )}
 
-            {/* Confirmation text for weekly / biweekly */}
-            {(recurrenceType === "weekly" || recurrenceType === "biweekly") && date && (
-              <p className="font-serif italic text-[13px] text-cocoa pl-1">
+            {(recurrenceType === "weekly" || recurrenceType === "biweekly") && (
+              <p className="font-serif italic text-[13px] text-cocoa pl-[34px]">
                 {describeRecurrence(date, recurrenceType, monthlyMode)}
               </p>
             )}
 
-            {/* End date picker */}
             {recurrenceType !== "none" && (
-              <div className="flex items-center gap-3">
-                <span className="font-sans text-[11px] text-taupe shrink-0">Ends:</span>
+              <div className="flex items-center gap-3 pl-[34px]">
+                <span className="font-sans text-[11px] text-taupe/70 shrink-0">Ends:</span>
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
                       type="button"
                       className={cn(
-                        "flex-1 rounded-xl border border-cream bg-paper px-3 py-2.5 font-sans text-sm text-left transition-colors",
+                        "flex-1 text-left font-sans text-[13px] underline-offset-2 hover:underline",
                         recurrenceEndDate ? "text-espresso" : "text-taupe/50"
                       )}
                     >
@@ -511,7 +597,7 @@ const CreateEvent = () => {
                       mode="single"
                       selected={recurrenceEndDate}
                       onSelect={setRecurrenceEndDate}
-                      disabled={(d) => date ? d <= date : false}
+                      disabled={(d) => (date ? d <= date : false)}
                       className="pointer-events-auto p-3"
                     />
                     {recurrenceEndDate && (
@@ -520,7 +606,7 @@ const CreateEvent = () => {
                         onClick={() => setRecurrenceEndDate(undefined)}
                         className="w-full py-2.5 font-sans text-[11px] text-taupe border-t border-cream hover:text-destructive transition-colors"
                       >
-                        Clear — set ongoing
+                        Clear — ongoing
                       </button>
                     )}
                   </PopoverContent>
@@ -528,80 +614,152 @@ const CreateEvent = () => {
               </div>
             )}
 
-            {/* Preview: next 3 dates */}
-            {recurrenceType !== "none" && date && (() => {
+            {recurrenceType !== "none" && (() => {
               const previews = computePreviewDates(date, recurrenceType, monthlyMode, recurrenceEndDate, 3);
-              return (
-                <div className="rounded-xl bg-paper border border-cream px-4 py-3 space-y-1">
-                  <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.22em] text-taupe">
-                    Upcoming
-                  </p>
-                  {previews.length > 0 ? (
-                    <p className="font-sans text-[13px] text-cocoa">
-                      {previews.map((d) => format(d, "MMM d")).join(" · ")}
-                    </p>
-                  ) : (
-                    <p className="font-sans text-[12px] italic text-taupe/60">
-                      No upcoming dates within the end date
-                    </p>
-                  )}
-                </div>
-              );
+              return previews.length > 0 ? (
+                <p className="font-sans text-[12px] text-taupe/70 pl-[34px]">
+                  Next: {previews.map((d) => format(d, "MMM d")).join(" · ")}
+                </p>
+              ) : null;
             })()}
           </div>
         )}
 
-        {/* Location */}
-        <div className="space-y-2">
-          <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">Location</label>
-          <PlacesAutocomplete
-            value={location}
-            onChange={setLocation}
-            placeholder="e.g. The Loft, 123 Main St"
-            className="w-full rounded-xl border border-cream bg-paper px-4 py-3.5 text-sm font-sans text-espresso placeholder:text-taupe/40 focus:border-cocoa focus:outline-none focus:ring-1 focus:ring-cocoa transition-colors"
-          />
+        {/* ── LOCATION ── */}
+        <div className="flex items-start gap-4 border-b border-cream px-6 py-4">
+          <MapPin className="h-[18px] w-[18px] shrink-0 text-blush mt-[18px]" strokeWidth={1.5} />
+          <div className="flex-1 min-w-0">
+            <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.3em] text-taupe/60 mb-0.5">Location</p>
+            <PlacesAutocomplete
+              value={location}
+              onChange={setLocation}
+              placeholder="Add address"
+              className="w-full bg-transparent font-sans text-[15px] font-semibold text-espresso placeholder:text-cocoa placeholder:font-semibold focus:outline-none border-none"
+            />
+          </div>
+          <ChevronRight className="h-4 w-4 text-taupe/40 shrink-0 mt-[18px]" strokeWidth={1.5} />
         </div>
 
-        {/* Capacity + Price */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
-            <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">Capacity</label>
+        {/* ── CAPACITY ── */}
+        <div className="flex items-center gap-4 border-b border-cream px-6 py-4">
+          <Users className="h-[18px] w-[18px] shrink-0 text-blush" strokeWidth={1.5} />
+          <div className="flex-1">
+            <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.3em] text-taupe/60 mb-0.5">Capacity</p>
             <input
               type="number"
               min="1"
               value={capacity}
               onChange={(e) => setCapacity(e.target.value)}
               placeholder="Unlimited"
-              className="w-full rounded-xl border border-cream bg-paper px-4 py-3.5 text-sm font-sans text-espresso placeholder:text-taupe/40 focus:border-cocoa focus:outline-none focus:ring-1 focus:ring-cocoa transition-colors"
+              className="w-full bg-transparent font-sans text-[15px] font-semibold text-espresso placeholder:text-cocoa placeholder:font-semibold focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
           </div>
+          <ChevronRight className="h-4 w-4 text-taupe/40 shrink-0" strokeWidth={1.5} />
+        </div>
 
-          <div className="space-y-2">
-            <label className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">Price ($)</label>
+        {/* ── PRICE ── */}
+        <div className="flex items-center gap-4 border-b border-cream px-6 py-4">
+          <DollarSign className="h-[18px] w-[18px] shrink-0 text-blush" strokeWidth={1.5} />
+          <div className="flex-1">
+            <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.3em] text-taupe/60 mb-0.5">Price Per Guest</p>
             <input
               type="number"
               min="0"
               step="0.01"
               value={priceDollars}
               onChange={(e) => setPriceDollars(e.target.value)}
-              placeholder="0 = Free"
-              className="w-full rounded-xl border border-cream bg-paper px-4 py-3.5 text-sm font-sans text-espresso placeholder:text-taupe/40 focus:border-cocoa focus:outline-none focus:ring-1 focus:ring-cocoa transition-colors"
+              placeholder="Free"
+              className="w-full bg-transparent font-sans text-[15px] font-semibold text-espresso placeholder:text-cocoa placeholder:font-semibold focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
           </div>
+          <ChevronRight className="h-4 w-4 text-taupe/40 shrink-0" strokeWidth={1.5} />
         </div>
 
-        {/* Auto-reminders toggle */}
-        <div className="flex items-center justify-between border-b border-cream pb-5">
-          <div className="space-y-0.5">
-            <p className="font-sans text-sm font-medium text-espresso">Auto-reminders</p>
-            <p className="font-sans text-[11px] text-taupe">Send 48h & 24h reminders to guests</p>
+        {/* ── EXTERNAL PAYMENT LINK (only when price is set) ── */}
+        {priceDollars && parseFloat(priceDollars) > 0 && (
+          <div className="flex items-center gap-4 border-b border-cream px-6 py-4">
+            <ExternalLink className="h-[18px] w-[18px] shrink-0 text-blush" strokeWidth={1.5} />
+            <div className="flex-1">
+              <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.3em] text-taupe/60 mb-0.5">
+                Alternative Payment Link <span className="normal-case tracking-normal font-normal">(optional)</span>
+              </p>
+              <input
+                type="text"
+                value={externalPaymentLink}
+                onChange={(e) => setExternalPaymentLink(e.target.value)}
+                placeholder="venmo.com/yourname or Cash App $tag"
+                className="w-full bg-transparent font-sans text-[15px] font-semibold text-espresso placeholder:text-cocoa placeholder:font-semibold focus:outline-none"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ── DESCRIPTION ── */}
+        <div className="border-b border-cream px-6 py-4">
+          <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.3em] text-taupe/60 mb-2">Description</p>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
+            placeholder="Set the tone — what should guests expect?"
+            className="w-full bg-transparent font-serif italic text-[15px] text-cocoa placeholder:text-taupe/30 placeholder:not-italic focus:outline-none resize-none leading-relaxed"
+          />
+        </div>
+
+        {/* ── PRIVACY ── */}
+        <div className="border-b border-cream px-6 py-5 space-y-2">
+          <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.3em] text-taupe/60 mb-3">Privacy</p>
+          {PRIVACY_OPTIONS.map((opt) => {
+            const Icon = opt.icon;
+            const selected = privacy === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setPrivacy(opt.value)}
+                className={cn(
+                  "w-full flex items-center gap-3 rounded-2xl border px-4 py-3.5 text-left transition-all",
+                  selected
+                    ? "border-espresso/25 bg-espresso/5"
+                    : "border-cream bg-paper hover:border-taupe/25"
+                )}
+              >
+                <Icon
+                  className={cn("h-4 w-4 shrink-0", selected ? "text-espresso" : "text-taupe")}
+                  strokeWidth={1.5}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className={cn("font-sans text-sm font-medium", selected ? "text-espresso" : "text-cocoa")}>
+                    {opt.label}
+                  </p>
+                  <p className="font-sans text-[11px] text-taupe">{opt.desc}</p>
+                </div>
+                <div
+                  className={cn(
+                    "h-4 w-4 shrink-0 rounded-full border-2 transition-colors flex items-center justify-center",
+                    selected ? "border-espresso bg-espresso" : "border-taupe/30"
+                  )}
+                >
+                  {selected && <div className="h-1.5 w-1.5 rounded-full bg-background" />}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── AUTO-REMINDERS ── */}
+        <div className="flex items-center gap-4 border-b border-cream px-6 py-4">
+          <Bell className="h-[18px] w-[18px] shrink-0 text-blush" strokeWidth={1.5} />
+          <div className="flex-1">
+            <p className="font-sans text-[14px] font-medium text-espresso">Auto-reminders</p>
+            <p className="font-sans text-[11px] text-taupe">Send 48h &amp; 24h reminders to guests</p>
           </div>
           <button
             type="button"
             onClick={() => setAutoReminders(!autoReminders)}
             className={cn(
-              "relative h-7 w-12 rounded-full transition-colors",
-              autoReminders ? "bg-cocoa" : "bg-cream"
+              "relative h-7 w-12 rounded-full transition-colors shrink-0",
+              autoReminders ? "bg-espresso" : "bg-cream"
             )}
           >
             <span
@@ -613,32 +771,142 @@ const CreateEvent = () => {
           </button>
         </div>
 
-        {/* Initial guests (new events only) */}
+        {/* ── CO-HOSTS ── */}
+        <div className="border-b border-cream px-6 py-4 space-y-3">
+          <div className="flex items-center gap-4">
+            <UserPlus className="h-[18px] w-[18px] shrink-0 text-blush" strokeWidth={1.5} />
+            <div className="flex-1">
+              <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.3em] text-taupe/60">Co-hosts</p>
+              <p className="font-sans text-[11px] text-taupe">Full hosting permissions</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCohostPicker(!showCohostPicker)}
+              className="font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-taupe hover:text-espresso transition-colors"
+            >
+              {showCohostPicker ? "Close" : "+ Add"}
+            </button>
+          </div>
+
+          {(existingCohosts.filter((h) => !removedCohostIds.includes(h.user_id)).length > 0 || cohostIds.length > 0) && (
+            <div className="flex flex-wrap gap-2 pl-[34px]">
+              {existingCohosts
+                .filter((h) => !removedCohostIds.includes(h.user_id))
+                .map((h) => (
+                  <span
+                    key={h.user_id}
+                    className="flex items-center gap-1.5 rounded-full bg-espresso/10 px-3 py-1.5 font-sans text-[11px] text-espresso"
+                  >
+                    {h.full_name}
+                    {h.role !== "creator" && (
+                      <button
+                        type="button"
+                        onClick={() => setRemovedCohostIds((ids) => [...ids, h.user_id])}
+                      >
+                        <X className="h-3 w-3" strokeWidth={2} />
+                      </button>
+                    )}
+                  </span>
+                ))}
+              {cohostIds.map((uid) => {
+                const m = allMembers.find((m: any) => m.id === uid);
+                return (
+                  <span
+                    key={uid}
+                    className="flex items-center gap-1.5 rounded-full bg-espresso/10 px-3 py-1.5 font-sans text-[11px] text-espresso"
+                  >
+                    {m?.full_name || "Member"}
+                    <button
+                      type="button"
+                      onClick={() => setCohostIds((ids) => ids.filter((i) => i !== uid))}
+                    >
+                      <X className="h-3 w-3" strokeWidth={2} />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          {showCohostPicker && (
+            <div className="pl-[34px] space-y-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-taupe/60" strokeWidth={1.5} />
+                <input
+                  type="text"
+                  placeholder="Search members…"
+                  value={cohostSearch}
+                  onChange={(e) => setCohostSearch(e.target.value)}
+                  className="w-full rounded-full border border-cream bg-paper py-2.5 pl-9 pr-4 text-sm font-sans text-espresso placeholder:text-taupe focus:outline-none"
+                />
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-0.5 rounded-xl border border-cream bg-paper p-1">
+                {allMembers
+                  .filter((m: any) => {
+                    if (m.id === user?.id) return false;
+                    if (cohostIds.includes(m.id)) return false;
+                    if (existingCohosts.some((h) => h.user_id === m.id && !removedCohostIds.includes(m.id))) return false;
+                    if (!cohostSearch.trim()) return true;
+                    return (m.full_name || "").toLowerCase().includes(cohostSearch.toLowerCase());
+                  })
+                  .map((m: any) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => {
+                        setCohostIds((ids) => [...ids, m.id]);
+                        setCohostSearch("");
+                        setShowCohostPicker(false);
+                      }}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-cream transition-colors text-left"
+                    >
+                      {m.avatar_url ? (
+                        <img src={m.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover" />
+                      ) : (
+                        <div className="h-7 w-7 rounded-full bg-blush/30 flex items-center justify-center font-serif text-[11px] text-espresso">
+                          {(m.full_name || "?")[0]}
+                        </div>
+                      )}
+                      <span className="text-sm font-sans text-espresso">{m.full_name || "Member"}</span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── ADD GUESTS (new events only) ── */}
         {!editId && (
-          <div className="space-y-3 border-b border-cream pb-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">Add Guests</p>
-                <p className="font-sans text-[10px] text-taupe mt-0.5">Notify app members at creation — optional</p>
+          <div className="border-b border-cream px-6 py-4 space-y-3">
+            <div className="flex items-center gap-4">
+              <Users className="h-[18px] w-[18px] shrink-0 text-blush" strokeWidth={1.5} />
+              <div className="flex-1">
+                <p className="font-sans text-[9px] font-semibold uppercase tracking-[0.3em] text-taupe/60">Add Guests</p>
+                <p className="font-sans text-[11px] text-taupe">Notify members at creation — optional</p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowGuestPicker(!showGuestPicker)}
-                className="flex items-center gap-1.5 rounded-full bg-cream px-3 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-cocoa transition-colors hover:bg-cream/80"
+                className="font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-taupe hover:text-espresso transition-colors"
               >
-                <UserPlus className="h-3.5 w-3.5" strokeWidth={1.5} />
-                {showGuestPicker ? "Close" : "Add"}
+                {showGuestPicker ? "Close" : "+ Add"}
               </button>
             </div>
 
             {initialGuestIds.length > 0 && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 pl-[34px]">
                 {initialGuestIds.map((gid) => {
                   const m = allMembers.find((m: any) => m.id === gid);
                   return (
-                    <span key={gid} className="flex items-center gap-1.5 rounded-full bg-cocoa/10 px-3 py-1 font-sans text-[10px] font-semibold text-cocoa">
+                    <span
+                      key={gid}
+                      className="flex items-center gap-1.5 rounded-full bg-espresso/10 px-3 py-1.5 font-sans text-[11px] text-espresso"
+                    >
                       {m?.full_name || "Member"}
-                      <button type="button" onClick={() => setInitialGuestIds((ids) => ids.filter((i) => i !== gid))}>
+                      <button
+                        type="button"
+                        onClick={() => setInitialGuestIds((ids) => ids.filter((i) => i !== gid))}
+                      >
                         <X className="h-3 w-3" strokeWidth={2} />
                       </button>
                     </span>
@@ -648,15 +916,15 @@ const CreateEvent = () => {
             )}
 
             {showGuestPicker && (
-              <div className="space-y-2">
+              <div className="pl-[34px] space-y-2">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-taupe" strokeWidth={1.5} />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-taupe/60" strokeWidth={1.5} />
                   <input
                     type="text"
                     placeholder="Search members…"
                     value={guestSearch}
                     onChange={(e) => setGuestSearch(e.target.value)}
-                    className="w-full rounded-full border border-cream bg-paper py-2.5 pl-9 pr-4 text-sm font-sans text-espresso placeholder:text-taupe focus:outline-none focus:ring-1 focus:ring-cocoa"
+                    className="w-full rounded-full border border-cream bg-paper py-2.5 pl-9 pr-4 text-sm font-sans text-espresso placeholder:text-taupe focus:outline-none"
                   />
                 </div>
                 <div className="max-h-52 overflow-y-auto space-y-1 rounded-xl border border-cream bg-paper p-1">
@@ -671,7 +939,10 @@ const CreateEvent = () => {
                       <button
                         key={m.id}
                         type="button"
-                        onClick={() => { setInitialGuestIds((ids) => [...ids, m.id]); setGuestSearch(""); }}
+                        onClick={() => {
+                          setInitialGuestIds((ids) => [...ids, m.id]);
+                          setGuestSearch("");
+                        }}
                         className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-cream transition-colors text-left"
                       >
                         {m.avatar_url ? (
@@ -684,8 +955,15 @@ const CreateEvent = () => {
                         <span className="text-sm font-sans text-espresso">{m.full_name || "Member"}</span>
                       </button>
                     ))}
-                  {allMembers.filter((m: any) => m.id !== user?.id && !initialGuestIds.includes(m.id) && (!guestSearch.trim() || (m.full_name || "").toLowerCase().includes(guestSearch.toLowerCase()))).length === 0 && (
-                    <p className="text-sm font-sans text-taupe text-center py-3">{guestSearch ? "No matches" : "No other members yet"}</p>
+                  {allMembers.filter(
+                    (m: any) =>
+                      m.id !== user?.id &&
+                      !initialGuestIds.includes(m.id) &&
+                      (!guestSearch.trim() || (m.full_name || "").toLowerCase().includes(guestSearch.toLowerCase()))
+                  ).length === 0 && (
+                    <p className="text-sm font-sans text-taupe text-center py-3">
+                      {guestSearch ? "No matches" : "No other members yet"}
+                    </p>
                   )}
                 </div>
               </div>
@@ -693,18 +971,6 @@ const CreateEvent = () => {
           </div>
         )}
 
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={submitting || !title}
-          className="w-full rounded-full bg-cocoa py-3.5 transition-all hover:opacity-90 disabled:opacity-50"
-        >
-          <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-background">
-            {submitting
-              ? editId ? "Saving…" : "Creating…"
-              : editId ? "Save Changes" : "Create Event"}
-          </span>
-        </button>
       </form>
     </div>
   );

@@ -111,7 +111,7 @@ const Archive = () => {
           type: "photo_reminder",
         }));
         // Best-effort insert; ignore if table doesn't exist yet
-        await (supabase as any).from("notifications").insert(notifications).throwOnError().catch(() => {});
+        await (supabase as any).from("notifications").insert(notifications);
       }
     },
     onSuccess: () => {
@@ -152,7 +152,7 @@ const Archive = () => {
         event_id: messageTarget.id,
         body: messageText.trim(),
         created_by: user!.id,
-      }).throwOnError().catch(() => {});
+      });
 
       toast({ title: "Message sent to attendees" });
       setMessageTarget(null);
@@ -261,6 +261,7 @@ const Archive = () => {
                         src={event.cover_image_url}
                         alt={event.title}
                         className="h-full w-full object-cover"
+                        style={{ objectPosition: (event as any).cover_image_position || "50% 50%" }}
                       />
                     ) : (
                       <div

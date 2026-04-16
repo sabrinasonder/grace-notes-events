@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useParams, Navigate, useNavigate } from "react-router-dom";
+import { useParams, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useFavorites } from "@/hooks/use-favorites";
 import { useAuth } from "@/lib/auth";
 import { EventChat, useUnreadChatCount } from "@/components/EventChat";
@@ -89,7 +89,26 @@ const EventDetail = () => {
   const [showEditScopeModal, setShowEditScopeModal] = useState(false);
   const [showCancelScopeModal, setShowCancelScopeModal] = useState(false);
   const [isCancellingRecurring, setIsCancellingRecurring] = useState(false);
+  const [showAddCohost, setShowAddCohost] = useState(false);
+  const [cohostSearch, setCohostSearch] = useState("");
+  const [showInviteSheet, setShowInviteSheet] = useState(false);
+  const [showPaymentSheet, setShowPaymentSheet] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const { isFavorited, toggleFavorite } = useFavorites();
+
+  // Show success toast when returning from Stripe checkout
+  useEffect(() => {
+    if (searchParams.get("checkout") === "success") {
+      toast({ title: "Payment confirmed!", description: "You're all set — see you there." });
+      // Strip param from URL without a re-navigation
+      const next = new URLSearchParams(searchParams);
+      next.delete("checkout");
+      next.delete("session_id");
+      setSearchParams(next, { replace: true });
+      // Refresh RSVP data (webhook may have already updated, but invalidate to be safe)
+      queryClient.invalidateQueries({ queryKey: ["rsvps", id] });
+    }
+  }, []);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["event", id],
@@ -182,7 +201,20 @@ const EventDetail = () => {
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user && showInviteMembers,
+    enabled: !!user && (showInviteMembers || showAddCohost),
+  });
+
+  const { data: eventHosts = [] } = useQuery({
+    queryKey: ["event_hosts", id],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("event_hosts")
+        .select("*, profiles!event_hosts_user_id_fkey(full_name, avatar_url)")
+        .eq("event_id", id!);
+      if (error) return [];
+      return data as any[];
+    },
+    enabled: !!id && !!user,
   });
 
   const inviteMemberMutation = useMutation({
@@ -224,6 +256,45 @@ const EventDetail = () => {
     },
   });
 
+  const addCohostMutation = useMutation({
+    mutationFn: async (memberId: string) => {
+      const { error } = await (supabase as any).from("event_hosts").insert({
+        event_id: id,
+        user_id: memberId,
+        role: "co-host",
+        added_by: user!.id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event_hosts", id] });
+      toast({ title: "Co-host added!" });
+      setCohostSearch("");
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to add co-host", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const removeCohostMutation = useMutation({
+    mutationFn: async (cohostUserId: string) => {
+      const { error } = await (supabase as any)
+        .from("event_hosts")
+        .delete()
+        .eq("event_id", id)
+        .eq("user_id", cohostUserId)
+        .eq("role", "co-host");
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event_hosts", id] });
+      toast({ title: "Co-host removed" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to remove co-host", description: err.message, variant: "destructive" });
+    },
+  });
+
   const markPaidMutation = useMutation({
     mutationFn: async ({ rsvpId, guestId, paid }: { rsvpId: string; guestId: string; paid: boolean }) => {
       const { error } = await supabase
@@ -231,14 +302,14 @@ const EventDetail = () => {
         .update({ paid })
         .eq("id", rsvpId);
       if (error) throw error;
-      // Write audit log
+      // Write audit log (ignore failure — doesn't block the paid update)
       await (supabase as any).from("rsvp_payment_logs").insert({
         rsvp_id: rsvpId,
         event_id: id,
         guest_id: guestId,
         changed_by: user!.id,
         paid,
-      }).throwOnError().catch(() => {});
+      });
     },
     onSuccess: (_, { paid }) => {
       queryClient.invalidateQueries({ queryKey: ["rsvps", id] });
@@ -295,7 +366,7 @@ const EventDetail = () => {
             to: profileData.phone,
             message: `${hostName}: Reminder to complete payment for ${event?.title}. ${eventUrl}`,
           },
-        }).catch(() => {});
+        });
       }
       toast({ title: "Reminder sent!" });
     } catch (err: any) {
@@ -518,7 +589,7 @@ const EventDetail = () => {
                   eventUrl: `${window.location.origin}/event/${id}`,
                 },
               },
-            }).catch(() => {});
+            });
           }
         }
       }
@@ -618,7 +689,7 @@ const EventDetail = () => {
                   eventUrl: `${window.location.origin}/event/${id}`,
                 },
               },
-            }).catch(() => {});
+            });
           }
           if (profileData?.phone && profileData?.phone_verified) {
             supabase.functions.invoke("send-sms", {
@@ -626,7 +697,7 @@ const EventDetail = () => {
                 to: profileData.phone,
                 message: `${hostName} posted an update for ${event.title}: ${truncatedUpdate} ${window.location.origin}/event/${id}`,
               },
-            }).catch(() => {});
+            });
           }
         }
       }
@@ -689,6 +760,10 @@ const EventDetail = () => {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["rsvps", id] });
       queryClient.invalidateQueries({ queryKey: ["events"] });
+      // For paid events: show payment sheet when going
+      if (result?.action === "created" && result.status === "going" && event && event.price_cents > 0) {
+        setShowPaymentSheet(true);
+      }
       if (result && result.action !== "removed" && user?.email && event) {
         supabase.functions.invoke("send-transactional-email", {
           body: {
@@ -702,7 +777,7 @@ const EventDetail = () => {
               status: result.status,
             },
           },
-        }).catch(() => {});
+        });
       }
     },
     onError: (err: any) => {
@@ -744,7 +819,20 @@ const EventDetail = () => {
   }
 
   const hostProfile = event.profiles as any;
-  const isHost = event.host_id === user.id;
+  const isHost = event.host_id === user.id || eventHosts.some((h: any) => h.user_id === user.id);
+  // Build display list: prefer event_hosts (has all hosts including creator), fall back to host_id profile
+  const displayHosts: { full_name: string; avatar_url: string | null; user_id: string; role: string }[] =
+    eventHosts.length > 0
+      ? eventHosts.map((h: any) => ({ ...h.profiles, user_id: h.user_id, role: h.role }))
+      : [{ full_name: hostProfile?.full_name || "Host", avatar_url: hostProfile?.avatar_url ?? null, user_id: event.host_id, role: "creator" }];
+  const getHostNamesDisplay = (hosts: typeof displayHosts) => {
+    const names = hosts.map((h) => (h?.full_name || "Host").split(" ")[0]);
+    if (names.length === 0) return "Host";
+    if (names.length === 1) return hosts[0]?.full_name || "Host";
+    if (names.length === 2) return `${names[0]} & ${names[1]}`;
+    if (names.length === 3) return `${names[0]}, ${names[1]} & ${names[2]}`;
+    return `${names[0]}, ${names[1]} +${names.length - 2} others`;
+  };
   const eventAny = event as any;
   const isRecurring = !!(eventAny.parent_event_id || eventAny.is_recurring_parent);
   const parentEventId: string | null =
@@ -806,7 +894,7 @@ const EventDetail = () => {
       {/* ── 1. HERO COVER ────────────────────────────────────────── */}
       <div className="relative h-72 w-full overflow-hidden">
         {event.cover_image_url ? (
-          <img src={event.cover_image_url} alt={event.title} className="h-full w-full object-cover" />
+          <img src={event.cover_image_url} alt={event.title} className="h-full w-full object-cover" style={{ objectPosition: (event as any).cover_image_position || "50% 50%" }} />
         ) : (
           <div
             className="h-full w-full"
@@ -898,19 +986,62 @@ const EventDetail = () => {
         </div>
 
         {/* Hero pills (price + privacy) */}
-        <div className="absolute top-12 left-20 flex gap-2">
+        <div className="absolute top-12 left-20 flex gap-2 flex-wrap max-w-[55%]">
           {event.status === "cancelled" && (
             <span className="rounded-full bg-destructive px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
               Cancelled
             </span>
           )}
-          <span className="rounded-full bg-cocoa/80 px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-background backdrop-blur-sm">
-            {isFree ? "Free" : `$${(event.price_cents / 100).toFixed(0)}`}
-          </span>
-          <span className="rounded-full bg-cocoa/80 px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-background backdrop-blur-sm flex items-center gap-1">
-            {event.privacy === "invite_only" ? <Lock className="h-3 w-3" /> : event.privacy === "request_to_join" ? <UserCheck className="h-3 w-3" /> : <Globe className="h-3 w-3" />}
-            {event.privacy === "invite_only" ? "Invite Only" : event.privacy === "request_to_join" ? "Request" : "Open"}
-          </span>
+
+          {/* ── Price badge ── */}
+          {isFree ? (
+            <span className="rounded-full bg-cocoa/80 px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-background backdrop-blur-sm">
+              Free
+            </span>
+          ) : myRsvp?.paid ? (
+            <span className="rounded-full bg-sage/90 px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm flex items-center gap-1">
+              <Check className="h-2.5 w-2.5" strokeWidth={2.5} />
+              ${(event.price_cents / 100).toFixed(0)} Paid
+            </span>
+          ) : (
+            <button
+              onClick={() => setShowPaymentSheet(true)}
+              className="rounded-full bg-blush px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm flex items-center gap-1 transition-opacity hover:opacity-90"
+            >
+              <CreditCard className="h-2.5 w-2.5" strokeWidth={2} />
+              ${(event.price_cents / 100).toFixed(0)} — Pay
+            </button>
+          )}
+
+          {/* ── Privacy / Invite badge ── */}
+          {isHost ? (
+            <button
+              onClick={() => setShowInviteSheet(true)}
+              className="rounded-full bg-cocoa/80 px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-background backdrop-blur-sm flex items-center gap-1 transition-opacity hover:opacity-90"
+            >
+              <UserPlus className="h-2.5 w-2.5" strokeWidth={2} />
+              Invite
+            </button>
+          ) : isRequestToJoin && hasPendingRequest ? (
+            <span className="rounded-full bg-blush/80 px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm flex items-center gap-1">
+              <Clock className="h-2.5 w-2.5" strokeWidth={2} />
+              Pending
+            </span>
+          ) : isRequestToJoin && !myRsvp ? (
+            <button
+              onClick={() => requestToJoinMutation.mutate()}
+              disabled={requestToJoinMutation.isPending}
+              className="rounded-full bg-cocoa/80 px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-background backdrop-blur-sm flex items-center gap-1 transition-opacity hover:opacity-90 disabled:opacity-60"
+            >
+              <UserCheck className="h-2.5 w-2.5" strokeWidth={2} />
+              {requestToJoinMutation.isPending ? "Sending…" : "Request"}
+            </button>
+          ) : isInviteOnly && !myRsvp ? (
+            <span className="rounded-full bg-cocoa/80 px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-background backdrop-blur-sm flex items-center gap-1">
+              <Lock className="h-2.5 w-2.5" strokeWidth={2} />
+              Invite Only
+            </span>
+          ) : null}
         </div>
 
         {/* Hero title overlay at bottom */}
@@ -927,19 +1058,30 @@ const EventDetail = () => {
       {/* ── 2. HOST ATTRIBUTION ROW ──────────────────────────────── */}
       <div className="mx-auto max-w-lg px-6 pt-6 pb-5 border-b border-cream">
         <div className="flex items-center gap-3">
-          {hostProfile?.avatar_url ? (
-            <img src={hostProfile.avatar_url} alt="" className="h-[42px] w-[42px] rounded-full object-cover" />
-          ) : (
-            <div className="h-[42px] w-[42px] rounded-full bg-blush/30 flex items-center justify-center font-serif text-sm text-espresso">
-              {hostInitials}
-            </div>
-          )}
+          {/* Avatar stack */}
+          <div className="flex -space-x-2.5 shrink-0">
+            {displayHosts.slice(0, 3).map((h, idx) => {
+              const ini = (h?.full_name || "?").split(" ").map((w) => w[0]).join("").substring(0, 2).toUpperCase();
+              return h?.avatar_url ? (
+                <img key={idx} src={h.avatar_url} alt="" className="h-[42px] w-[42px] rounded-full object-cover ring-2 ring-background" />
+              ) : (
+                <div key={idx} className="h-[42px] w-[42px] rounded-full bg-blush/30 flex items-center justify-center font-serif text-sm text-espresso ring-2 ring-background">
+                  {ini}
+                </div>
+              );
+            })}
+            {displayHosts.length > 3 && (
+              <div className="h-[42px] w-[42px] rounded-full bg-cream flex items-center justify-center font-sans text-xs text-taupe ring-2 ring-background">
+                +{displayHosts.length - 3}
+              </div>
+            )}
+          </div>
           <div>
             <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">
               Hosted By
             </p>
             <p className="font-serif text-[17px] text-espresso">
-              {hostProfile?.full_name || "Host"}
+              {getHostNamesDisplay(displayHosts)}
             </p>
             {isHost && (
               <p className="font-serif text-[13px] italic text-taupe">You're hosting</p>
@@ -1117,6 +1259,27 @@ const EventDetail = () => {
         </div>
       )}
 
+      {/* ── PAYMENT DUE BANNER (unpaid going member) ─────────────── */}
+      {!isFree && myRsvp?.status === "going" && !myRsvp?.paid && event.status !== "cancelled" && (
+        <div className="mx-auto max-w-lg px-6 py-3 border-b border-cream">
+          <div className="flex items-center gap-3 rounded-2xl bg-blush/10 border border-blush/25 px-4 py-3.5">
+            <CreditCard className="h-5 w-5 text-blush shrink-0" strokeWidth={1.5} />
+            <div className="flex-1 min-w-0">
+              <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-blush">Payment due</p>
+              <p className="font-sans text-xs text-cocoa mt-0.5">
+                You're going! ${(event.price_cents / 100).toFixed(0)} per guest
+              </p>
+            </div>
+            <button
+              onClick={() => setShowPaymentSheet(true)}
+              className="shrink-0 rounded-full bg-blush px-4 py-2 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-white transition-opacity hover:opacity-90"
+            >
+              Pay Now
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── 4. TABS (flat, editorial) ────────────────────────────── */}
       <div className="mx-auto max-w-lg px-6 mt-0">
         <div className="flex border-b border-cream">
@@ -1215,6 +1378,99 @@ const EventDetail = () => {
 
         {tab === "guests" && (
           <div className="space-y-6">
+            {/* Hosts section */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">
+                  {displayHosts.length > 1 ? `Hosts · ${displayHosts.length}` : "Host"}
+                </p>
+                {isHost && event.status !== "cancelled" && (
+                  <button
+                    onClick={() => setShowAddCohost(!showAddCohost)}
+                    className="flex items-center gap-1.5 rounded-full bg-cream px-3 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-cocoa transition-colors hover:bg-cream/80"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    {showAddCohost ? "Close" : "Add Co-host"}
+                  </button>
+                )}
+              </div>
+
+              {showAddCohost && isHost && (
+                <div className="space-y-2 rounded-2xl border border-cream bg-paper p-3">
+                  <input
+                    type="text"
+                    value={cohostSearch}
+                    onChange={(e) => setCohostSearch(e.target.value)}
+                    placeholder="Search members…"
+                    className="w-full rounded-full border border-cream bg-background px-4 py-2.5 text-sm font-sans text-espresso placeholder:text-taupe focus:outline-none focus:ring-1 focus:ring-cocoa"
+                  />
+                  <div className="max-h-48 overflow-y-auto space-y-0.5">
+                    {allMembers
+                      .filter((m: any) => {
+                        if (!cohostSearch.trim()) return true;
+                        return (m.full_name || "").toLowerCase().includes(cohostSearch.toLowerCase());
+                      })
+                      .filter((m: any) => !eventHosts.some((h: any) => h.user_id === m.id))
+                      .map((m: any) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => addCohostMutation.mutate(m.id)}
+                          disabled={addCohostMutation.isPending}
+                          className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-cream transition-colors text-left disabled:opacity-50"
+                        >
+                          {m.avatar_url ? (
+                            <img src={m.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                          ) : (
+                            <div className="h-8 w-8 rounded-full bg-blush/30 flex items-center justify-center font-serif text-xs text-espresso shrink-0">
+                              {(m.full_name || "?").split(" ").map((w: string) => w[0]).join("").substring(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <span className="font-sans text-sm text-espresso">{m.full_name}</span>
+                        </button>
+                      ))}
+                    {allMembers.filter((m: any) => !eventHosts.some((h: any) => h.user_id === m.id)).length === 0 && (
+                      <p className="text-sm font-sans text-taupe text-center py-3">All members are already co-hosts</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-0">
+                {displayHosts.map((h, idx) => {
+                  const initials = (h?.full_name || "?").split(" ").map((w) => w[0]).join("").substring(0, 2).toUpperCase();
+                  const isCreator = h.role === "creator" || h.user_id === event.host_id;
+                  return (
+                    <div key={h.user_id || idx} className="flex items-center gap-3 border-b border-cream py-3 last:border-b-0">
+                      {h?.avatar_url ? (
+                        <img src={h.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover" />
+                      ) : (
+                        <div className="h-9 w-9 rounded-full bg-blush/30 flex items-center justify-center font-serif text-xs text-espresso">
+                          {initials}
+                        </div>
+                      )}
+                      <span className="flex-1 font-sans text-sm text-espresso">{h?.full_name || "Host"}</span>
+                      <span className={cn(
+                        "rounded-full px-2.5 py-0.5 font-sans text-[9px] font-semibold uppercase tracking-[0.2em]",
+                        isCreator ? "bg-cocoa/10 text-cocoa" : "bg-blush/20 text-blush"
+                      )}>
+                        {isCreator ? "Creator" : "Co-host"}
+                      </span>
+                      {isHost && !isCreator && (
+                        <button
+                          onClick={() => removeCohostMutation.mutate(h.user_id)}
+                          disabled={removeCohostMutation.isPending}
+                          className="ml-1 rounded-full p-1.5 hover:bg-cream transition-colors"
+                        >
+                          <X className="h-3.5 w-3.5 text-taupe" strokeWidth={2} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Host: pending requests */}
             {isHost && pendingRequests.length > 0 && (
               <div className="space-y-3">
@@ -1866,7 +2122,7 @@ const EventDetail = () => {
                   </div>
                 ) : myRsvp?.status === "going" && !myRsvp?.paid ? (
                   <button
-                    onClick={() => setShowCheckout(true)}
+                    onClick={() => setShowPaymentSheet(true)}
                     className="w-full flex items-center justify-center gap-2 rounded-full bg-blush py-3.5 transition-all hover:opacity-90"
                   >
                     <CreditCard className="h-4 w-4 text-white" strokeWidth={1.5} />
@@ -1884,11 +2140,11 @@ const EventDetail = () => {
                       Can't make it
                     </button>
                     <button
-                      onClick={() => setShowCheckout(true)}
+                      onClick={() => rsvpMutation.mutate("going")}
                       disabled={rsvpMutation.isPending}
                       className="flex-1 rounded-full bg-cocoa py-3.5 font-sans text-[12px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90 disabled:opacity-50"
                     >
-                      {`RSVP · $${(event.price_cents / 100).toFixed(0)}`}
+                      {rsvpMutation.isPending ? "Saving…" : `RSVP · $${(event.price_cents / 100).toFixed(0)}`}
                     </button>
                   </div>
                 )}
@@ -2128,6 +2384,137 @@ const EventDetail = () => {
             >
               Keep event
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── PAYMENT MODAL ────────────────────────────────────────── */}
+      {showPaymentSheet && !isFree && event.status !== "cancelled" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-5" onClick={() => setShowPaymentSheet(false)}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div
+            className="relative w-full max-w-sm rounded-3xl bg-paper p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close */}
+            <button
+              onClick={() => setShowPaymentSheet(false)}
+              className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-cream"
+            >
+              <X className="h-3.5 w-3.5 text-cocoa" strokeWidth={2} />
+            </button>
+
+            {/* Header */}
+            <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.25em] text-taupe mb-1">Complete Payment</p>
+            <h3 className="font-serif text-xl text-espresso pr-8 mb-1">{event.title}</h3>
+            <p className="font-sans text-sm text-taupe mb-6">
+              ${(event.price_cents / 100).toFixed(0)} per guest
+            </p>
+
+            {/* Pay with Card — primary */}
+            <button
+              onClick={() => { setShowPaymentSheet(false); setShowCheckout(true); }}
+              className="w-full flex items-center justify-center gap-3 rounded-2xl bg-espresso py-4 mb-3 transition-opacity hover:opacity-90 active:scale-[0.99]"
+            >
+              <CreditCard className="h-5 w-5 text-background" strokeWidth={1.5} />
+              <span className="font-sans text-[13px] font-semibold uppercase tracking-[0.2em] text-background">
+                Pay with Card — ${(event.price_cents / 100).toFixed(0)}
+              </span>
+            </button>
+
+            {/* Pay Another Way — secondary */}
+            {(event as any).external_payment_link ? (
+              <div className="rounded-2xl border border-cream bg-background p-4 space-y-2">
+                <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-taupe">Pay Another Way</p>
+                <p className="font-sans text-xs text-cocoa leading-relaxed">
+                  Send ${(event.price_cents / 100).toFixed(0)} to the host directly, then they'll confirm your payment.
+                </p>
+                <a
+                  href={(event as any).external_payment_link.startsWith("http") ? (event as any).external_payment_link : `https://${(event as any).external_payment_link}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setShowPaymentSheet(false)}
+                  className="flex items-center gap-1.5 font-sans text-sm font-semibold text-blush"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  {(event as any).external_payment_link}
+                </a>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowPaymentSheet(false)}
+                className="w-full py-2.5 font-sans text-[12px] text-taupe text-center"
+              >
+                I'll pay another way
+              </button>
+            )}
+
+            <p className="text-center font-sans text-[10px] text-taupe/70 mt-3">
+              Your RSVP is saved. Tap the banner on the event page to pay later.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── HOST INVITE MODAL ─────────────────────────────────────── */}
+      {showInviteSheet && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-5" onClick={() => setShowInviteSheet(false)}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div
+            className="relative w-full max-w-sm rounded-3xl bg-paper p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close */}
+            <button
+              onClick={() => setShowInviteSheet(false)}
+              className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-cream"
+            >
+              <X className="h-3.5 w-3.5 text-cocoa" strokeWidth={2} />
+            </button>
+
+            <h3 className="font-serif text-xl text-espresso mb-6 pr-8">Invite Guests</h3>
+
+            <div className="space-y-3">
+              {/* Share invite link */}
+              <button
+                onClick={async () => {
+                  setShowInviteSheet(false);
+                  const url = `${window.location.origin}/event/${id}`;
+                  if (navigator.share) {
+                    try { await navigator.share({ title: event.title, text: `You're invited to ${event.title}`, url }); } catch {}
+                  } else {
+                    try { await navigator.clipboard.writeText(url); toast({ title: "Invite link copied!" }); } catch {}
+                  }
+                }}
+                className="w-full flex items-center gap-4 rounded-2xl border border-cream bg-background p-4 text-left transition-colors hover:bg-cream active:scale-[0.99]"
+              >
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cocoa/10">
+                  <Share2 className="h-5 w-5 text-cocoa" strokeWidth={1.5} />
+                </div>
+                <div>
+                  <p className="font-sans text-sm font-semibold text-espresso">Share Invite Link</p>
+                  <p className="font-sans text-xs text-taupe mt-0.5">Text, WhatsApp, email — any way you like</p>
+                </div>
+              </button>
+
+              {/* Invite from members */}
+              <button
+                onClick={() => {
+                  setShowInviteSheet(false);
+                  setTab("guests");
+                  setTimeout(() => setShowInviteMembers(true), 150);
+                }}
+                className="w-full flex items-center gap-4 rounded-2xl border border-cream bg-background p-4 text-left transition-colors hover:bg-cream active:scale-[0.99]"
+              >
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blush/20">
+                  <Users className="h-5 w-5 text-blush" strokeWidth={1.5} />
+                </div>
+                <div>
+                  <p className="font-sans text-sm font-semibold text-espresso">Invite from Members</p>
+                  <p className="font-sans text-xs text-taupe mt-0.5">Add existing Sonder Circle members</p>
+                </div>
+              </button>
+            </div>
           </div>
         </div>
       )}
