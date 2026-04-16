@@ -4,11 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { format, isToday, addDays, isBefore } from "date-fns";
-import { Calendar, Users, Heart, Sparkles, Share2, UserCheck, Lock, Repeat } from "lucide-react";
+import { Calendar, Users, Heart, Sparkles, Share2, UserCheck, Lock, Repeat, Bell, CreditCard, UserPlus, X, ChevronRight, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useFavorites } from "@/hooks/use-favorites";
 import { BottomNav } from "@/components/BottomNav";
+import { useNotifications } from "@/hooks/use-notifications";
 
 type FilterMode = "going" | "hosting";
 
@@ -43,6 +44,19 @@ const Index = () => {
   const queryClient = useQueryClient();
   const heartedScrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  const { unreadCount } = useNotifications();
+  const [dismissedBanners, setDismissBanner] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(sessionStorage.getItem("dismissed_banners") || "[]")); }
+    catch { return new Set(); }
+  });
+  const dismissBanner = (key: string) => {
+    setDismissBanner((prev) => {
+      const next = new Set(prev).add(key);
+      sessionStorage.setItem("dismissed_banners", JSON.stringify([...next]));
+      return next;
+    });
+  };
 
   const requestAccessMutation = useMutation({
     mutationFn: async (eventId: string) => {
@@ -153,7 +167,74 @@ const Index = () => {
     enabled: !!user,
   });
 
-  // Pending RSVP requests for events I host
+  // ── Banner data ────────────────────────────────────────────────────────────
+
+  // Is the current user an admin?
+  const { data: isAdmin = false } = useQuery({
+    queryKey: ["is_admin", user?.id],
+    queryFn: async () => {
+      const { data } = await (supabase as any).rpc("has_role", { user_id: user!.id, role: "admin" });
+      return !!data;
+    },
+    enabled: !!user,
+  });
+
+  // Pending membership requests (admin only)
+  const { data: pendingMemberCount = 0 } = useQuery({
+    queryKey: ["pending_member_count"],
+    queryFn: async () => {
+      const { count } = await (supabase as any)
+        .from("membership_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending");
+      return count || 0;
+    },
+    enabled: !!user && isAdmin,
+  });
+
+  // Pending event invites for the current user
+  const { data: pendingInvites = [] } = useQuery({
+    queryKey: ["pending-event-invites-banner", user?.id],
+    queryFn: async () => {
+      const { data: invites } = await supabase
+        .from("event_invites")
+        .select("id, event_id, invited_by")
+        .eq("invited_user_id", user!.id)
+        .eq("status", "pending" as any);
+      if (!invites?.length) return [];
+      const eventIds = invites.map((i: any) => i.event_id);
+      const inviterIds = [...new Set(invites.map((i: any) => i.invited_by))] as string[];
+      const [{ data: evts }, { data: pfs }] = await Promise.all([
+        supabase.from("events").select("id, title, starts_at").in("id", eventIds),
+        supabase.from("profiles").select("id, full_name, avatar_url").in("id", inviterIds),
+      ]);
+      return invites.map((inv: any) => ({
+        ...inv,
+        event: evts?.find((e: any) => e.id === inv.event_id) ?? null,
+        inviter: pfs?.find((p: any) => p.id === inv.invited_by) ?? null,
+      }));
+    },
+    enabled: !!user,
+  });
+
+  // Unpaid RSVPs for upcoming paid events
+  const { data: unpaidRsvps = [] } = useQuery({
+    queryKey: ["unpaid-rsvps-banner", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("rsvps")
+        .select("event_id, paid, events!inner(id, title, price_cents, starts_at)")
+        .eq("user_id", user!.id)
+        .eq("status", "going")
+        .eq("paid", false);
+      return ((data || []) as any[]).filter(
+        (r: any) => r.events?.price_cents > 0 && new Date(r.events?.starts_at) > new Date()
+      );
+    },
+    enabled: !!user,
+  });
+
+  // ── Pending RSVP requests for events I host ──────────────────────────────
   const { data: pendingRequests = [] } = useQuery({
     queryKey: ["pending-rsvp-requests", user?.id],
     queryFn: async () => {
@@ -390,12 +471,34 @@ const Index = () => {
             <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.25em] text-taupe">
               {format(now, "EEEE, MMMM d")}
             </p>
-            <button
-              onClick={() => setMode(mode === "going" ? "hosting" : "going")}
-              className="rounded-full border border-cocoa px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-cocoa transition-colors hover:bg-cocoa/5"
-            >
-              {mode === "going" ? "Going" : "Hosting"}
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Search icon */}
+              <button
+                onClick={() => navigate("/search")}
+                className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-cream transition-colors"
+                aria-label="Search events"
+              >
+                <Search className="h-[18px] w-[18px] text-cocoa" strokeWidth={1.5} />
+              </button>
+              {/* Notification bell */}
+              <button
+                onClick={() => navigate("/notifications")}
+                className="relative flex h-9 w-9 items-center justify-center rounded-full hover:bg-cream transition-colors"
+                aria-label="Notifications"
+              >
+                <Bell className="h-[18px] w-[18px] text-cocoa" strokeWidth={1.5} />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-blush border border-background" />
+                )}
+              </button>
+              {/* Mode toggle */}
+              <button
+                onClick={() => setMode(mode === "going" ? "hosting" : "going")}
+                className="rounded-full border border-cocoa px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-cocoa transition-colors hover:bg-cocoa/5"
+              >
+                {mode === "going" ? "Going" : "Hosting"}
+              </button>
+            </div>
           </div>
 
           <h1 className="font-serif text-[38px] font-normal text-espresso leading-[1.1]" style={{ letterSpacing: "-0.02em" }}>
@@ -484,6 +587,156 @@ const Index = () => {
           </div>
         </div>
       )}
+
+      {/* ── Contextual banners ──────────────────────────────────────────────── */}
+      {(() => {
+        // Build banner list by priority, show at most 2
+        const banners: React.ReactNode[] = [];
+
+        // 1. Admin: pending membership requests
+        if (isAdmin && pendingMemberCount > 0 && !dismissedBanners.has("admin-members")) {
+          banners.push(
+            <div key="admin-members" className="flex items-center gap-3 rounded-2xl border border-cream bg-paper px-4 py-3.5">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-cream">
+                <Users className="h-4 w-4 text-taupe" strokeWidth={1.5} />
+              </div>
+              <button
+                onClick={() => navigate("/admin/members")}
+                className="flex-1 min-w-0 text-left"
+              >
+                <p className="font-sans text-[13px] font-semibold text-espresso leading-snug">
+                  {pendingMemberCount} member {pendingMemberCount === 1 ? "request" : "requests"} to review
+                </p>
+                <p className="font-sans text-[11px] text-taupe mt-0.5">
+                  {pendingMemberCount === 1 ? "Someone wants" : "People want"} to join Sonder Circle
+                </p>
+              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => navigate("/admin/members")}
+                  className="rounded-full bg-espresso px-3 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.18em] text-background"
+                >
+                  Review
+                </button>
+                <button
+                  onClick={() => dismissBanner("admin-members")}
+                  className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-cream transition-colors"
+                >
+                  <X className="h-3.5 w-3.5 text-taupe" strokeWidth={2} />
+                </button>
+              </div>
+            </div>
+          );
+        }
+
+        // 2. Unpaid RSVPs (show first unpaid)
+        if (unpaidRsvps.length > 0) {
+          const first = unpaidRsvps[0] as any;
+          const bannerKey = `unpaid-${first.event_id}`;
+          if (!dismissedBanners.has(bannerKey)) {
+            banners.push(
+              <div key={bannerKey} className="flex items-center gap-3 rounded-2xl border border-blush/20 bg-blush/5 px-4 py-3.5">
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-blush/10">
+                  <CreditCard className="h-4 w-4 text-blush" strokeWidth={1.5} />
+                </div>
+                <button
+                  onClick={() => navigate(`/event/${first.event_id}`)}
+                  className="flex-1 min-w-0 text-left"
+                >
+                  <p className="font-sans text-[13px] font-semibold text-espresso leading-snug">
+                    Payment due for {first.events?.title}
+                  </p>
+                  <p className="font-sans text-[11px] text-taupe mt-0.5">
+                    ${(first.events?.price_cents / 100).toFixed(0)} — tap to pay
+                  </p>
+                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => navigate(`/event/${first.event_id}`)}
+                    className="rounded-full bg-blush px-3 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.18em] text-white"
+                  >
+                    Pay
+                  </button>
+                  <button
+                    onClick={() => dismissBanner(bannerKey)}
+                    className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-blush/10 transition-colors"
+                  >
+                    <X className="h-3.5 w-3.5 text-taupe" strokeWidth={2} />
+                  </button>
+                </div>
+              </div>
+            );
+          }
+        }
+
+        // 3. Pending event invites
+        if (pendingInvites.length > 0) {
+          const first = pendingInvites[0] as any;
+          const bannerKey = `invite-${first.id}`;
+          if (!dismissedBanners.has(bannerKey)) {
+            const inviterFirst = first.inviter?.full_name?.split(" ")[0] ?? "Someone";
+            banners.push(
+              <div key={bannerKey} className="flex items-center gap-3 rounded-2xl border border-cream bg-paper px-4 py-3.5">
+                {first.inviter?.avatar_url ? (
+                  <img src={first.inviter.avatar_url} alt="" className="h-9 w-9 flex-shrink-0 rounded-full object-cover" />
+                ) : (
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-blush/20 font-serif text-[13px] text-espresso">
+                    {(first.inviter?.full_name || "?").split(" ").map((w: string) => w[0]).join("").substring(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <button
+                  onClick={() => navigate(`/event/${first.event_id}`)}
+                  className="flex-1 min-w-0 text-left"
+                >
+                  <p className="font-sans text-[13px] font-semibold text-espresso leading-snug">
+                    {inviterFirst} invited you
+                    {pendingInvites.length > 1 ? ` (+${pendingInvites.length - 1} more)` : ""}
+                  </p>
+                  <p className="font-sans text-[11px] text-taupe mt-0.5 truncate">
+                    {first.event?.title ?? "to an event"}
+                  </p>
+                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => navigate(`/event/${first.event_id}`)}
+                    className="flex items-center gap-1 rounded-full bg-espresso px-3 py-1.5 font-sans text-[10px] font-semibold uppercase tracking-[0.18em] text-background"
+                  >
+                    View
+                    <ChevronRight className="h-3 w-3" strokeWidth={2} />
+                  </button>
+                  <button
+                    onClick={() => dismissBanner(bannerKey)}
+                    className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-cream transition-colors"
+                  >
+                    <X className="h-3.5 w-3.5 text-taupe" strokeWidth={2} />
+                  </button>
+                </div>
+              </div>
+            );
+          }
+        }
+
+        if (banners.length === 0) return null;
+
+        const visible = banners.slice(0, 2);
+        const hasMore = banners.length > 2;
+
+        return (
+          <div className="px-6 mb-2">
+            <div className="mx-auto max-w-lg space-y-2.5">
+              {visible}
+              {hasMore && (
+                <button
+                  onClick={() => navigate("/notifications")}
+                  className="w-full text-center font-sans text-[11px] text-taupe/70 underline underline-offset-2"
+                >
+                  View all notifications
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Event cards */}
       <div className="px-6">

@@ -20,6 +20,8 @@ import InviteFriend from "./pages/InviteFriend.tsx";
 import AcceptInvite from "./pages/AcceptInvite.tsx";
 import HeartedEvents from "./pages/HeartedEvents.tsx";
 import JoinPage from "./pages/JoinPage.tsx";
+import Notifications from "./pages/Notifications.tsx";
+import SearchEvents from "./pages/SearchEvents.tsx";
 import PendingApproval from "./pages/PendingApproval.tsx";
 import AdminMembers from "./pages/AdminMembers.tsx";
 import SeriesEvents from "./pages/SeriesEvents.tsx";
@@ -59,6 +61,8 @@ const App = () => (
             <Route path="/invite" element={<InviteFriend />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />
             <Route path="/hearted" element={<HeartedEvents />} />
+            <Route path="/notifications" element={<Notifications />} />
+            <Route path="/search" element={<SearchEvents />} />
             <Route path="/pending" element={<PendingApproval />} />
             <Route path="/admin/members" element={<AdminMembers />} />
             <Route path="/series/:parentId" element={<SeriesEvents />} />
