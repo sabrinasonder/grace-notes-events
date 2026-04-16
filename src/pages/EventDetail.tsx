@@ -117,7 +117,7 @@ const EventDetail = () => {
         .from("events")
         .select("*, profiles!events_host_id_fkey(full_name, avatar_url, email)")
         .eq("id", id!)
-        .single();
+        .maybeSingle();
       if (error) throw error;
       return data;
     },
@@ -184,9 +184,20 @@ const EventDetail = () => {
       const { data, error } = await supabase
         .from("event_invites")
         .select("*")
-        .eq("event_id", id!);
+        .eq("event_id", id!)
+        .neq("status", "declined" as any);
       if (error) throw error;
-      return data || [];
+      if (!data?.length) return [];
+      // Fetch profile names — invited_user_id has no FK so we do a separate lookup
+      const userIds = data.map((inv: any) => inv.invited_user_id);
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url, email")
+        .in("id", userIds);
+      return data.map((inv: any) => ({
+        ...inv,
+        profile: profiles?.find((p: any) => p.id === inv.invited_user_id) ?? null,
+      }));
     },
     enabled: !!id && !!user,
   });
@@ -219,20 +230,26 @@ const EventDetail = () => {
 
   const inviteMemberMutation = useMutation({
     mutationFn: async (memberId: string) => {
-      const { error } = await supabase.from("event_invites").insert({
-        event_id: id!,
-        invited_user_id: memberId,
-        invited_by: user!.id,
-      });
+      // Upsert so re-inviting a previously declined member reactivates their invite
+      const { error } = await (supabase as any).from("event_invites").upsert(
+        { event_id: id!, invited_user_id: memberId, invited_by: user!.id, status: "pending" },
+        { onConflict: "event_id,invited_user_id" }
+      );
       if (error) throw error;
       try {
-        const member = allMembers.find((m: any) => m.id === memberId);
-        if (member?.email && event) {
+        // Always look up email fresh from profiles — don't rely on allMembers state
+        // (allMembers is lazily loaded and may be empty when called from handleInviteNewMember)
+        const { data: memberProfile } = await supabase
+          .from("profiles")
+          .select("email, full_name")
+          .eq("id", memberId)
+          .maybeSingle();
+        if (memberProfile?.email && event) {
           const hostName = user?.user_metadata?.full_name || "The host";
           await supabase.functions.invoke("send-transactional-email", {
             body: {
               templateName: "event-invite",
-              recipientEmail: member.email,
+              recipientEmail: memberProfile.email,
               idempotencyKey: `event-invite-${id}-${memberId}`,
               templateData: {
                 eventTitle: event.title,
@@ -254,6 +271,45 @@ const EventDetail = () => {
     onError: (err: any) => {
       toast({ title: "Invite failed", description: err.message, variant: "destructive" });
     },
+  });
+
+  const resendInviteMutation = useMutation({
+    mutationFn: async (inv: any) => {
+      if (!inv.profile?.email || !event) return;
+      const hostName = user?.user_metadata?.full_name || "The host";
+      await supabase.functions.invoke("send-transactional-email", {
+        body: {
+          templateName: "event-invite",
+          recipientEmail: inv.profile.email,
+          idempotencyKey: `event-invite-resend-${id}-${inv.invited_user_id}-${Date.now()}`,
+          templateData: {
+            eventTitle: event.title,
+            eventDate: format(new Date(event.starts_at), "EEEE, MMMM d 'at' h:mm a"),
+            hostName,
+            eventUrl: `${window.location.origin}/event/${id}`,
+          },
+        },
+      });
+    },
+    onSuccess: () => toast({ title: "Invite resent!" }),
+    onError: () => toast({ title: "Failed to resend invite", variant: "destructive" }),
+  });
+
+  const removeInviteMutation = useMutation({
+    mutationFn: async (inviteId: string) => {
+      // Set to declined rather than delete — preserves audit trail and keeps
+      // existing RSVPs intact (can_view_event checks rsvps independently).
+      const { error } = await supabase
+        .from("event_invites")
+        .update({ status: "declined" as any })
+        .eq("id", inviteId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event_invites", id] });
+      toast({ title: "Invite removed" });
+    },
+    onError: (err: any) => toast({ title: "Failed to remove invite", description: err.message, variant: "destructive" }),
   });
 
   const addCohostMutation = useMutation({
@@ -764,6 +820,28 @@ const EventDetail = () => {
       if (result?.action === "created" && result.status === "going" && event && event.price_cents > 0) {
         setShowPaymentSheet(true);
       }
+      // When an invited guest responds for the first time, update invite status + show a warm toast
+      if (result?.action === "created" && isInvited) {
+        const newInviteStatus =
+          result.status === "going" ? "accepted" : result.status === "declined" ? "declined" : null;
+        if (newInviteStatus) {
+          supabase
+            .from("event_invites")
+            .update({ status: newInviteStatus as any })
+            .eq("event_id", id!)
+            .eq("invited_user_id", user!.id)
+            .then(() => queryClient.invalidateQueries({ queryKey: ["event_invites", id] }));
+        }
+        const hostFirstName = (event?.profiles as any)?.full_name?.split(" ")[0] || "the host";
+        if (result.status === "going" && isFree) {
+          toast({ title: "You're going! 🎉" });
+        } else if (result.status === "maybe") {
+          toast({ title: "Got it!", description: `We'll let ${hostFirstName} know you might make it` });
+        } else if (result.status === "declined") {
+          toast({ title: "No worries", description: `We'll let ${hostFirstName} know` });
+        }
+        return; // skip confirmation email — they already received an invite email
+      }
       if (result && result.action !== "removed" && user?.email && event) {
         supabase.functions.invoke("send-transactional-email", {
           body: {
@@ -806,7 +884,7 @@ const EventDetail = () => {
     );
   }
 
-  if (!user) return <Navigate to="/join" replace />;
+  if (!user) return <Navigate to={`/join?redirect=/event/${id}`} replace />;
   if (!event) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background gap-4">
@@ -1541,13 +1619,46 @@ const EventDetail = () => {
                 </div>
 
                 {eventInvites.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="space-y-2">
                     {eventInvites.map((inv: any) => {
-                      const member = allMembers.find((m: any) => m.id === inv.invited_user_id);
+                      const name = inv.profile?.full_name || "Member";
+                      const initials = name.split(" ").map((w: string) => w[0]).join("").substring(0, 2).toUpperCase();
+                      const isPending = inv.status === "pending";
                       return (
-                        <span key={inv.id} className="rounded-full bg-cream px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-cocoa">
-                          {member?.full_name || "Member"} · {inv.status}
-                        </span>
+                        <div key={inv.id} className="flex items-center gap-3 rounded-2xl bg-cream/50 px-3.5 py-2.5">
+                          {/* Avatar */}
+                          {inv.profile?.avatar_url ? (
+                            <img src={inv.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover flex-shrink-0" />
+                          ) : (
+                            <div className="h-7 w-7 rounded-full bg-blush/30 flex items-center justify-center font-serif text-[9px] text-espresso flex-shrink-0">
+                              {initials}
+                            </div>
+                          )}
+                          {/* Name + status */}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-sans text-[12px] font-semibold text-espresso truncate">{name}</p>
+                            <p className="font-sans text-[10px] text-taupe uppercase tracking-[0.15em]">{inv.status}</p>
+                          </div>
+                          {/* Actions */}
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {isPending && (
+                              <button
+                                onClick={() => resendInviteMutation.mutate(inv)}
+                                disabled={resendInviteMutation.isPending}
+                                className="rounded-full border border-cocoa/30 px-2.5 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.15em] text-cocoa hover:bg-cocoa/5 transition-colors disabled:opacity-40"
+                              >
+                                Resend
+                              </button>
+                            )}
+                            <button
+                              onClick={() => removeInviteMutation.mutate(inv.id)}
+                              disabled={removeInviteMutation.isPending}
+                              className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-cream transition-colors disabled:opacity-40"
+                            >
+                              <X className="h-3 w-3 text-taupe" strokeWidth={2} />
+                            </button>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
@@ -1963,6 +2074,16 @@ const EventDetail = () => {
           <div className="px-6 py-3">
             <div className="mx-auto max-w-lg">
               <div className="space-y-2">
+                {/* Invited header — shown when guest has a pending invite and hasn't responded */}
+                {isInvited && !myRsvp && !isHost && (
+                  <div className="flex items-center justify-center pb-0.5">
+                    <p className="font-serif text-[14px] text-espresso">
+                      {(event.profiles as any)?.full_name
+                        ? `${(event.profiles as any).full_name.split(" ")[0]} invited you`
+                        : "You're invited!"}
+                    </p>
+                  </div>
+                )}
                 {isHost && (
                   <div className="flex items-center justify-between px-1">
                     <p className="font-serif italic text-[12px] text-taupe">You're hosting</p>
@@ -2038,7 +2159,7 @@ const EventDetail = () => {
                     disabled={rsvpMutation.isPending}
                     className="flex-1 rounded-full bg-cocoa py-3 font-sans text-[12px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90 disabled:opacity-50"
                   >
-                    I'm going
+                    {rsvpMutation.isPending ? "Saving…" : isInvited ? "Going" : "I'm going"}
                   </button>
                 </div>
               )}
@@ -2130,6 +2251,56 @@ const EventDetail = () => {
                       Pay ${(event.price_cents / 100).toFixed(0)} to confirm
                     </span>
                   </button>
+                ) : myRsvp && !myRsvp.paid ? (
+                  /* Has RSVP (maybe/declined) on paid event — show 3 status buttons */
+                  <div className="flex gap-2">
+                    <button onClick={() => rsvpMutation.mutate("going")} disabled={rsvpMutation.isPending}
+                      className={cn("flex-1 rounded-full py-3 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] transition-all disabled:opacity-50",
+                        myRsvp.status === "going" ? "bg-sage/20 text-sage border border-sage/40" : "border border-cream bg-paper text-taupe hover:bg-cream")}
+                    >{myRsvp.status === "going" ? "✓ Going" : "Going"}</button>
+                    <button onClick={() => rsvpMutation.mutate("maybe")} disabled={rsvpMutation.isPending}
+                      className={cn("flex-1 rounded-full py-3 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] transition-all disabled:opacity-50",
+                        myRsvp.status === "maybe" ? "bg-blush/20 text-blush border border-blush/40" : "border border-cream bg-paper text-taupe hover:bg-cream")}
+                    >{myRsvp.status === "maybe" ? "✓ Maybe" : "Maybe"}</button>
+                    <button onClick={() => rsvpMutation.mutate("declined")} disabled={rsvpMutation.isPending}
+                      className={cn("flex-1 rounded-full py-3 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] transition-all disabled:opacity-50",
+                        myRsvp.status === "declined" ? "bg-cocoa/10 text-cocoa border border-cocoa/30" : "border border-cream bg-paper text-taupe hover:bg-cream")}
+                    >{myRsvp.status === "declined" ? "✓ Can't go" : "Can't go"}</button>
+                  </div>
+                ) : isInvited ? (
+                  /* Invited guest on paid event — 3 buttons with invited header */
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-center pb-0.5">
+                      <p className="font-serif text-[14px] text-espresso">
+                        {(event.profiles as any)?.full_name
+                          ? `${(event.profiles as any).full_name.split(" ")[0]} invited you`
+                          : "You're invited!"}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => rsvpMutation.mutate("declined")}
+                        disabled={rsvpMutation.isPending}
+                        className="rounded-full border border-cream bg-paper py-3 px-4 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-taupe transition-all hover:bg-cream disabled:opacity-50"
+                      >
+                        Can't go
+                      </button>
+                      <button
+                        onClick={() => rsvpMutation.mutate("maybe")}
+                        disabled={rsvpMutation.isPending}
+                        className="rounded-full border border-cream bg-paper py-3 px-4 font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-taupe transition-all hover:bg-cream disabled:opacity-50"
+                      >
+                        Maybe
+                      </button>
+                      <button
+                        onClick={() => rsvpMutation.mutate("going")}
+                        disabled={rsvpMutation.isPending}
+                        className="flex-1 rounded-full bg-cocoa py-3 font-sans text-[12px] font-semibold uppercase tracking-[0.2em] text-background transition-all hover:opacity-90 disabled:opacity-50"
+                      >
+                        {rsvpMutation.isPending ? "Saving…" : `Going · $${(event.price_cents / 100).toFixed(0)}`}
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <div className="flex gap-3">
                     <button
