@@ -113,7 +113,7 @@ const Index = () => {
         .from("events")
         .select("*, profiles!events_host_id_fkey(full_name, avatar_url), rsvps(id, status), event_hosts(user_id, profiles!event_hosts_user_id_fkey(full_name, avatar_url))")
         .gte("starts_at", new Date().toISOString())
-        .or("status.eq.active,status.is.null")
+        .eq("status", "active")
         .order("starts_at", { ascending: true });
       if (error) throw error;
       return data || [];
@@ -145,7 +145,7 @@ const Index = () => {
         .select("*, profiles!events_host_id_fkey(full_name, avatar_url)")
         .in("id", favorites)
         .gte("starts_at", new Date().toISOString())
-        .or("status.eq.active,status.is.null")
+        .eq("status", "active")
         .order("starts_at", { ascending: true })
         .limit(5);
       if (error) throw error;
@@ -248,8 +248,10 @@ const Index = () => {
   });
 
   // Default hosts to "Hosting" mode on first load
+  // Don't lock until we actually have data — avoids stale-cache false-empty
   useEffect(() => {
     if (eventsLoading || hasSetInitialMode.current || !user) return;
+    if (events.length === 0) return;
     hasSetInitialMode.current = true;
     const isHostingAny = events.some((e: any) => e.host_id === user.id);
     if (isHostingAny) setMode("hosting");
