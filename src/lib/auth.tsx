@@ -10,7 +10,7 @@ interface AuthContextType {
   loading: boolean;
   membershipStatus: MembershipStatus;
   refreshMembership: () => Promise<void>;
-  signInWithMagicLink: (email: string) => Promise<{ error: Error | null }>;
+  signInWithMagicLink: (email: string, options?: { emailRedirectTo?: string }) => Promise<{ error: Error | null }>;
   signInWithPassword: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -70,7 +70,11 @@ async function processNewSignup(userId: string) {
       .maybeSingle();
     if (existing) return;
 
-    const payload: Record<string, any> = { user_id: userId, status: "pending" };
+    // Auto-approve users who joined via an invite code or event link
+    const viaEventLink = localStorage.getItem("sonder_via_event_link") === "true";
+    const status = (code || viaEventLink) ? "approved" : "pending";
+
+    const payload: Record<string, any> = { user_id: userId, status };
     if (code) {
       payload.invite_code = code;
       const { data: inv } = await (supabase as any)
@@ -89,6 +93,7 @@ async function processNewSignup(userId: string) {
   } finally {
     localStorage.removeItem("sonder_invite_code");
     localStorage.removeItem("sonder_invite_ref");
+    localStorage.removeItem("sonder_via_event_link");
   }
 }
 
@@ -145,11 +150,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signInWithMagicLink = async (email: string) => {
+  const signInWithMagicLink = async (email: string, options?: { emailRedirectTo?: string }) => {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: options?.emailRedirectTo ?? window.location.origin,
         shouldCreateUser: true, // TODO: set back to false before launch
       },
     });

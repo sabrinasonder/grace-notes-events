@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Check, Loader2, Phone, Shield } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Phone, Shield, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { BottomNav } from "@/components/BottomNav";
 
@@ -13,6 +13,8 @@ const SettingsAccount = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [fullName, setFullName] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
   const [phone, setPhone] = useState("");
@@ -37,6 +39,44 @@ const SettingsAccount = () => {
     if (profile?.full_name) setFullName(profile.full_name);
     if (profile?.phone) setPhone(profile.phone);
   }, [profile]);
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Photo too large", description: "Please choose an image under 5 MB.", variant: "destructive" });
+      return;
+    }
+    setIsUploadingPhoto(true);
+    try {
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const path = `${user.id}/avatar.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (uploadError) {
+        if (uploadError.message?.toLowerCase().includes("bucket")) {
+          throw new Error("Storage not set up yet — run migration 20260416110000 in Supabase SQL Editor first.");
+        }
+        throw uploadError;
+      }
+      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
+      // Bust the CDN cache by appending a timestamp
+      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: publicUrl })
+        .eq("id", user.id);
+      if (updateError) throw updateError;
+      queryClient.invalidateQueries({ queryKey: ["profile", user.id] });
+      toast({ title: "Photo updated!" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const handleSaveName = async () => {
     if (!fullName.trim() || !user) return;
@@ -127,6 +167,51 @@ const SettingsAccount = () => {
       </div>
 
       <div className="mx-auto max-w-lg px-6 mt-8 space-y-8">
+        {/* Profile photo */}
+        <div className="flex flex-col items-center gap-4 pb-2">
+          <div className="relative">
+            {/* Avatar */}
+            {profile?.avatar_url ? (
+              <img
+                src={profile.avatar_url}
+                alt="Profile"
+                className="h-24 w-24 rounded-full object-cover border-2 border-cream"
+              />
+            ) : (
+              <div className="h-24 w-24 rounded-full bg-blush/20 border-2 border-cream flex items-center justify-center font-serif text-3xl text-espresso">
+                {(profile?.full_name || user?.email || "?").split(" ").map((w: string) => w[0]).join("").substring(0, 2).toUpperCase()}
+              </div>
+            )}
+            {/* Camera overlay button */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploadingPhoto}
+              className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-espresso border-2 border-background shadow transition-opacity hover:opacity-80 disabled:opacity-50"
+              aria-label="Change photo"
+            >
+              {isUploadingPhoto ? (
+                <Loader2 className="h-3.5 w-3.5 text-background animate-spin" strokeWidth={2} />
+              ) : (
+                <Camera className="h-3.5 w-3.5 text-background" strokeWidth={2} />
+              )}
+            </button>
+          </div>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploadingPhoto}
+            className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-taupe hover:text-cocoa transition-colors disabled:opacity-40"
+          >
+            {isUploadingPhoto ? "Uploading…" : profile?.avatar_url ? "Change photo" : "Add photo"}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/heic"
+            className="hidden"
+            onChange={handlePhotoSelect}
+          />
+        </div>
+
         {/* Email */}
         <div className="space-y-2">
           <p className="font-sans text-[10px] font-semibold uppercase tracking-[0.22em] text-taupe">

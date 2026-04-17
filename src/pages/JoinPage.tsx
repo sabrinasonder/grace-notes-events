@@ -6,7 +6,7 @@
  *   landing → email entry → "check your inbox" confirmation.
  */
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -24,6 +24,8 @@ const JoinPage = () => {
   const { inviteCode } = useParams<{ inviteCode?: string }>();
   const { user, loading: authLoading, signInWithMagicLink } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectPath = searchParams.get("redirect") || "/";
 
   const [view, setView] = useState<View>("landing");
   const [email, setEmail] = useState("");
@@ -40,9 +42,24 @@ const JoinPage = () => {
     if (inviteCode) localStorage.setItem("sonder_invite_code", inviteCode);
   }, [inviteCode]);
 
-  // Signed-in users go straight to the app
+  // Persist redirect path so it survives the magic link email round-trip
   useEffect(() => {
-    if (!authLoading && user) navigate("/", { replace: true });
+    if (redirectPath !== "/") {
+      localStorage.setItem("sonder_redirect_after_auth", redirectPath);
+      // Separate flag for processNewSignup to auto-approve event-link signups
+      if (redirectPath.includes("/event/")) {
+        localStorage.setItem("sonder_via_event_link", "true");
+      }
+    }
+  }, [redirectPath]);
+
+  // Signed-in users go to the redirect destination (or home)
+  useEffect(() => {
+    if (!authLoading && user) {
+      const dest = localStorage.getItem("sonder_redirect_after_auth") || redirectPath;
+      localStorage.removeItem("sonder_redirect_after_auth");
+      navigate(dest, { replace: true });
+    }
   }, [authLoading, user, navigate]);
 
   // Look up inviter details when a code is present
@@ -77,7 +94,10 @@ const JoinPage = () => {
     if (!email.trim()) return;
     setError("");
     setSubmitting(true);
-    const { error: err } = await signInWithMagicLink(email.trim());
+    const emailRedirectTo = redirectPath !== "/"
+      ? `${window.location.origin}/join?redirect=${encodeURIComponent(redirectPath)}`
+      : window.location.origin;
+    const { error: err } = await signInWithMagicLink(email.trim(), { emailRedirectTo });
     setSubmitting(false);
     if (err) {
       setError(err.message);
