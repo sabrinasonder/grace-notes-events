@@ -357,7 +357,7 @@ const CreateEvent = () => {
         navigate(`/event/${data.id}`);
       }
     } catch (err: any) {
-      toast({ title: "Something went wrong", description: err.message, variant: "destructive" });
+      toast({ title: "Something went wrong", description: `${err.message}${err.code ? ` [${err.code}]` : ""}${err.details ? ` — ${err.details}` : ""}`, variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
