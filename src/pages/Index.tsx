@@ -11,7 +11,7 @@ import { useFavorites } from "@/hooks/use-favorites";
 import { BottomNav } from "@/components/BottomNav";
 import { useNotifications } from "@/hooks/use-notifications";
 
-type FilterMode = "going" | "hosting";
+type FilterMode = "all" | "going" | "hosting";
 
 const GRADIENTS = [
   "linear-gradient(135deg, #D89B86 0%, #B97A66 60%, #3A2A20 100%)",
@@ -37,7 +37,7 @@ const Index = () => {
   const { user, loading, membershipStatus } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [mode, setMode] = useState<FilterMode>("going");
+  const [mode, setMode] = useState<FilterMode>("all");
   const [requestingId, setRequestingId] = useState<string | null>(null);
   const hasSetInitialMode = useRef(false);
   const { favorites, isFavorited, toggleFavorite } = useFavorites();
@@ -247,21 +247,24 @@ const Index = () => {
     enabled: !!user,
   });
 
-  // Default hosts to "Hosting" mode on first load
-  // Don't lock until we actually have data — avoids stale-cache false-empty
+  // Auto-select the most relevant mode on first load once data arrives
   useEffect(() => {
     if (eventsLoading || hasSetInitialMode.current || !user) return;
     if (events.length === 0) return;
     hasSetInitialMode.current = true;
     const isHostingAny = events.some((e: any) => e.host_id === user.id);
-    if (isHostingAny) setMode("hosting");
-  }, [eventsLoading, events, user]);
+    if (isHostingAny) { setMode("hosting"); return; }
+    const hasRsvps = events.some((e: any) => myRsvpEventIds.has(e.id));
+    if (hasRsvps) { setMode("going"); return; }
+    // Otherwise stay on "all" — member can see everything available to them
+  }, [eventsLoading, events, user, myRsvpEventIds]);
 
   const myRsvpEventIds = useMemo(() => new Set(myRsvps.map((r) => r.event_id)), [myRsvps]);
 
   const filteredEvents = useMemo(() => {
     if (mode === "hosting") return events.filter((e: any) => e.host_id === user?.id);
-    return events.filter((e: any) => myRsvpEventIds.has(e.id));
+    if (mode === "going") return events.filter((e: any) => myRsvpEventIds.has(e.id));
+    return events; // "all" — show everything visible to this user
   }, [events, mode, user?.id, myRsvpEventIds]);
 
   // For recurring series, only show the next upcoming instance (events are already sorted ASC)
@@ -495,10 +498,10 @@ const Index = () => {
               </button>
               {/* Mode toggle */}
               <button
-                onClick={() => setMode(mode === "going" ? "hosting" : "going")}
+                onClick={() => setMode(mode === "all" ? "going" : mode === "going" ? "hosting" : "all")}
                 className="rounded-full border border-cocoa px-3 py-2 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-cocoa transition-colors hover:bg-cocoa/5"
               >
-                {mode === "going" ? "Going" : "Hosting"}
+                {mode === "all" ? "All" : mode === "going" ? "Going" : "Hosting"}
               </button>
             </div>
           </div>
@@ -518,13 +521,15 @@ const Index = () => {
                   {hostingCount} event{hostingCount !== 1 ? "s" : ""} you're hosting
                   {pendingCount > 0 && <> · {pendingCount} RSVP{pendingCount !== 1 ? "s" : ""} to review</>}
                 </>
-              ) : (
+              ) : mode === "going" ? (
                 <>
                   {attendingCount} upcoming
                   {myRsvps.filter(r => r.status === "maybe").length > 0 && (
                     <> · {myRsvps.filter(r => r.status === "maybe").length} need{myRsvps.filter(r => r.status === "maybe").length !== 1 ? "" : "s"} your reply</>
                   )}
                 </>
+              ) : (
+                <>{deduplicatedEvents.length} upcoming</>
               )}
             </p>
           </div>
@@ -756,10 +761,10 @@ const Index = () => {
               </div>
               <div className="space-y-2">
                 <h2 className="font-serif text-xl text-espresso">
-                  {mode === "hosting" ? "You're not hosting any events" : "No upcoming events"}
+                  {mode === "hosting" ? "You're not hosting any events" : mode === "going" ? "No upcoming events" : "Nothing coming up"}
                 </h2>
                 <p className="font-serif italic text-sm text-taupe">
-                  {mode === "hosting" ? "Create your first gathering." : "RSVP to an event to see it here."}
+                  {mode === "hosting" ? "Create your first gathering." : mode === "going" ? "RSVP to an event to see it here." : "Check back soon for new events."}
                 </p>
               </div>
             </div>
