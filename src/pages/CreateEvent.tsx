@@ -323,6 +323,7 @@ const CreateEvent = () => {
             external_payment_link: priceCents > 0 ? extLink : null,
             auto_reminders_enabled: autoReminders,
             privacy,
+            status: "active",
             ...recurrencePayload,
           });
         if (error) throw error;
