@@ -202,6 +202,27 @@ const EventDetail = () => {
     enabled: !!id && !!user,
   });
 
+  // Dedicated check: does the current user have a non-declined invite to this event?
+  // This is kept separate from eventInvites (the host's guest list query) because that
+  // query can fail silently, which would incorrectly set isInvited = false.
+  const { data: myInvite = null } = useQuery({
+    queryKey: ["my_event_invite", id, user?.id],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("event_invites")
+        .select("id, status")
+        .eq("event_id", id!)
+        .eq("invited_user_id", user!.id)
+        .maybeSingle();
+      if (error) {
+        console.warn("[EventDetail] invite check failed:", error);
+        return null;
+      }
+      return data as { id: string; status: string } | null;
+    },
+    enabled: !!id && !!user,
+  });
+
   const { data: allMembers = [] } = useQuery({
     queryKey: ["all_members"],
     queryFn: async () => {
@@ -938,7 +959,8 @@ const EventDetail = () => {
   const spotsLeft = event.capacity != null ? event.capacity - goingRsvps.length : null;
   const isRequestToJoin = event.privacy === "request_to_join";
   const isInviteOnly = event.privacy === "invite_only";
-  const isInvited = eventInvites.some((inv: any) => inv.invited_user_id === user?.id);
+  // Use the dedicated myInvite query — more reliable than scanning the shared eventInvites array
+  const isInvited = !!myInvite && myInvite.status !== "declined";
   const needsRequestToJoin = (isRequestToJoin || isInviteOnly) && !isInvited && !isHost && !myRsvp;
   const hasPendingRequest = myRequest?.status === "pending";
   const wasDeclined = myRequest?.status === "declined";
@@ -1296,38 +1318,6 @@ const EventDetail = () => {
                 View series
               </button>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* ── REQUEST ACCESS BANNER (non-RSVP'd members on restricted events) ── */}
-      {needsRequestToJoin && event.status !== "cancelled" && (
-        <div className="mx-auto max-w-lg px-6 py-4 border-b border-cream">
-          <div className="rounded-2xl bg-cream px-5 py-4 space-y-3">
-            <div className="flex items-center gap-2">
-              {isInviteOnly
-                ? <Lock className="h-4 w-4 text-cocoa shrink-0" strokeWidth={1.5} />
-                : <UserCheck className="h-4 w-4 text-cocoa shrink-0" strokeWidth={1.5} />}
-              <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-cocoa">
-                {isInviteOnly ? "Invite Only" : "Request to Join"}
-              </p>
-            </div>
-            <p className="font-sans text-sm text-cocoa leading-relaxed">
-              {isInviteOnly
-                ? "This gathering is invite only. Send the host a request and they'll get back to you."
-                : "Interested in attending? Send the host a request and they'll review it."}
-            </p>
-            {hasPendingRequest ? (
-              <div className="flex items-center gap-2 rounded-full border border-blush/40 bg-white px-4 py-2.5">
-                <Clock className="h-4 w-4 text-blush" strokeWidth={1.5} />
-                <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-blush">Your request is pending</span>
-              </div>
-            ) : wasDeclined ? (
-              <div className="flex items-center gap-2 rounded-full border border-destructive/30 bg-white px-4 py-2.5">
-                <X className="h-4 w-4 text-destructive" strokeWidth={1.5} />
-                <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-destructive">Request was declined</span>
-              </div>
-            ) : null}
           </div>
         </div>
       )}
