@@ -15,7 +15,7 @@ import {
   ChevronUp,
   Clock,
   X,
-  RotateCw,
+  Mail,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { BottomNav } from "@/components/BottomNav";
@@ -124,6 +124,40 @@ const InviteScreen = ({ user }: { user: any }) => {
     e.preventDefault();
     if (!name.trim() || !email.trim()) return;
     createInviteMutation.mutate();
+  };
+
+  const [resending, setResending] = useState<string | null>(null);
+
+  const handleResendEmail = async (inv: any) => {
+    setResending(inv.id);
+    try {
+      const link = joinLinkFor(inv.token);
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name, city")
+        .eq("id", user.id)
+        .single();
+
+      await supabase.functions.invoke("send-transactional-email", {
+        body: {
+          templateName: "circle-invite",
+          recipientEmail: inv.invitee_email,
+          idempotencyKey: `circle-invite-resend-${inv.id}-${Date.now()}`,
+          templateData: {
+            inviterName: profile?.full_name || "A friend",
+            inviteeName: inv.invitee_name,
+            personalNote: "Just a friendly reminder — I'd love for you to join Sonder Circle!",
+            city: profile?.city || null,
+            acceptUrl: link,
+          },
+        },
+      });
+      toast({ title: "Invite resent!", description: `Email sent to ${inv.invitee_email}` });
+    } catch (err: any) {
+      toast({ title: "Failed to resend", description: err.message, variant: "destructive" });
+    } finally {
+      setResending(null);
+    }
   };
 
   const revokeInviteMutation = useMutation({
@@ -299,14 +333,17 @@ const InviteScreen = ({ user }: { user: any }) => {
                       <span className={`font-sans text-[10px] font-semibold uppercase tracking-[0.18em] shrink-0 ${displayStatus.color}`}>
                         {displayStatus.label}
                       </span>
-                      {/* Reshare button for pending (non-expired) invites */}
+                      {/* Resend email button for pending (non-expired) invites */}
                       {inv.status === "pending" && !expired && (
                         <button
-                          onClick={() => handleShare(link, inv.invitee_name)}
-                          className="ml-1 flex h-7 w-7 items-center justify-center rounded-full border border-cream text-taupe transition-colors hover:bg-cream shrink-0"
-                          title="Reshare invite"
+                          onClick={() => handleResendEmail(inv)}
+                          disabled={resending === inv.id}
+                          className="ml-1 flex h-7 w-7 items-center justify-center rounded-full border border-cream text-taupe transition-colors hover:bg-cream shrink-0 disabled:opacity-40"
+                          title="Resend invite email"
                         >
-                          <RotateCw className="h-3 w-3" strokeWidth={1.5} />
+                          {resending === inv.id
+                            ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.5} />
+                            : <Mail className="h-3 w-3" strokeWidth={1.5} />}
                         </button>
                       )}
                       {/* Delete/revoke button for pending or expired invites */}
