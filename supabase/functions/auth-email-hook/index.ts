@@ -16,10 +16,10 @@ const corsHeaders = {
     'authorization, x-client-info, apikey, content-type, x-lovable-signature, x-lovable-timestamp, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 }
 
-const EMAIL_SUBJECTS: Record<string, string> = {
+const EMAIL_SUBJECTS: Record<string, string | ((data: any) => string)> = {
   signup: 'Confirm your email',
   invite: "You've been invited",
-  magiclink: 'Your login link',
+  magiclink: (data: any) => data.token ? 'Your sign-in code' : 'Your login link',
   recovery: 'Reset your password',
   email_change: 'Confirm your new email',
   reauthentication: 'Your verification code',
@@ -258,7 +258,9 @@ async function handleWebhook(req: Request): Promise<Response> {
       to: payload.data.email,
       from: `${SITE_NAME} <noreply@${FROM_DOMAIN}>`,
       sender_domain: SENDER_DOMAIN,
-      subject: EMAIL_SUBJECTS[emailType] || 'Notification',
+      subject: typeof EMAIL_SUBJECTS[emailType] === 'function'
+        ? (EMAIL_SUBJECTS[emailType] as (data: any) => string)(templateProps)
+        : (EMAIL_SUBJECTS[emailType] as string) || 'Notification',
       html,
       text,
       purpose: 'transactional',
