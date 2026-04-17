@@ -208,7 +208,7 @@ const EventDetail = () => {
   const { data: myInvite = null } = useQuery({
     queryKey: ["my_event_invite", id, user?.id],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("event_invites")
         .select("id, status")
         .eq("event_id", id!)
@@ -218,7 +218,7 @@ const EventDetail = () => {
         console.warn("[EventDetail] invite check failed:", error);
         return null;
       }
-      return data as { id: string; status: string } | null;
+      return data;
     },
     enabled: !!id && !!user,
   });
