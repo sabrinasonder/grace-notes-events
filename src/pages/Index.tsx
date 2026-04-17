@@ -252,6 +252,8 @@ const Index = () => {
     enabled: !!user,
   });
 
+  const myRsvpEventIds = useMemo(() => new Set(myRsvps.map((r) => r.event_id)), [myRsvps]);
+
   // Auto-select the most relevant mode on first load once data arrives
   useEffect(() => {
     if (eventsLoading || hasSetInitialMode.current || !user) return;
@@ -263,8 +265,6 @@ const Index = () => {
     if (hasRsvps) { setMode("going"); return; }
     // Otherwise stay on "all" — member can see everything available to them
   }, [eventsLoading, events, user, myRsvpEventIds]);
-
-  const myRsvpEventIds = useMemo(() => new Set(myRsvps.map((r) => r.event_id)), [myRsvps]);
 
   const filteredEvents = useMemo(() => {
     if (mode === "hosting") return events.filter((e: any) => e.host_id === user?.id);
