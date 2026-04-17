@@ -1,9 +1,10 @@
 /// <reference types="npm:@types/react@18.3.1" />
 import * as React from 'npm:react@18.3.1'
 import {
-  Body, Button, Container, Head, Heading, Hr, Html, Preview, Text,
+  Body, Container, Head, Html, Preview, Section, Text,
 } from 'npm:@react-email/components@0.0.22'
 import type { TemplateEntry } from './registry.ts'
+import { body, outer, card, accentBar, brand, divider, heading, bodyText, footer, strong, detailBlock, detailLine, detailLabel, detailValue, quoteBlock, quoteAuthor, contentBox, buttonWrap, button } from '../email-styles.ts'
 
 const SITE_NAME = 'Sonder Circle'
 
@@ -23,25 +24,55 @@ const RsvpConfirmationEmail = ({
   <Html lang="en" dir="ltr">
     <Head />
     <Preview>You are {status} to {eventTitle}</Preview>
-    <Body style={main}>
-      <Container style={container}>
-        <Text style={brand}>{SITE_NAME}</Text>
-        <Hr style={divider} />
-        <Heading style={h1}>
-          {status === 'going' ? "You're in!" : status === 'maybe' ? 'Noted — maybe!' : "We'll miss you"}
-        </Heading>
-        <Text style={text}>
-          {status === 'going'
-            ? `You've confirmed your spot for ${eventTitle}. We can't wait to see you.`
-            : status === 'maybe'
-            ? `You've marked yourself as maybe for ${eventTitle}. We hope you can make it!`
-            : `You've declined the invitation to ${eventTitle}. Maybe next time!`}
-        </Text>
-        {eventDate && <Text style={detail}>📅 {eventDate}</Text>}
-        {eventLocation && <Text style={detail}>📍 {eventLocation}</Text>}
-        <Text style={footer}>
-          See you at the circle ✨
-        </Text>
+    <Body style={body}>
+      <Container style={outer}>
+        <Container style={card}>
+          {/* Accent bar */}
+          <Section style={accentBar} />
+
+          {/* Brand */}
+          <Text style={brand}>{SITE_NAME}</Text>
+
+          {/* Divider */}
+          <Section style={divider} />
+
+          {/* Heading */}
+          <Text style={heading}>
+            {status === 'going' ? "You're in!" : status === 'maybe' ? 'Noted — maybe!' : "We'll miss you"}
+          </Text>
+
+          <Text style={bodyText}>
+            {status === 'going'
+              ? `You've confirmed your spot for ${eventTitle}. We can't wait to see you.`
+              : status === 'maybe'
+              ? `You've marked yourself as maybe for ${eventTitle}. We hope you can make it!`
+              : `You've declined the invitation to ${eventTitle}. Maybe next time!`}
+          </Text>
+
+          {(eventDate || eventLocation) && (
+            <Section style={detailBlock}>
+              {eventDate && (
+                <Text style={detailLine}>
+                  <span style={detailLabel}>When</span>
+                  <span style={detailValue}>{eventDate}</span>
+                </Text>
+              )}
+              {eventLocation && (
+                <Text style={detailLine}>
+                  <span style={detailLabel}>Where</span>
+                  <span style={detailValue}>{eventLocation}</span>
+                </Text>
+              )}
+            </Section>
+          )}
+
+          {/* Divider */}
+          <Section style={divider} />
+
+          <Text style={footer}>
+            See you at the circle
+          </Text>
+        </Container>
       </Container>
     </Body>
   </Html>
@@ -59,36 +90,3 @@ export const template = {
     status: 'going',
   },
 } satisfies TemplateEntry
-
-const main = { backgroundColor: '#ffffff', fontFamily: "'Manrope', 'Helvetica Neue', Arial, sans-serif" }
-const container = { padding: '40px 32px', maxWidth: '480px', margin: '0 auto' }
-const brand = {
-  fontFamily: "'Fraunces', Georgia, serif",
-  fontSize: '20px',
-  fontWeight: 400 as const,
-  color: '#1F1612',
-  margin: '0 0 16px',
-  textAlign: 'center' as const,
-}
-const divider = { borderColor: '#E8DDD4', margin: '0 0 32px' }
-const h1 = {
-  fontFamily: "'Fraunces', Georgia, serif",
-  fontSize: '24px',
-  fontWeight: 400 as const,
-  color: '#1F1612',
-  margin: '0 0 16px',
-}
-const text = {
-  fontSize: '14px',
-  color: '#8C7A6B',
-  lineHeight: '1.6',
-  margin: '0 0 20px',
-}
-const detail = {
-  fontSize: '14px',
-  color: '#3A2A20',
-  lineHeight: '1.6',
-  margin: '0 0 8px',
-  fontWeight: 500 as const,
-}
-const footer = { fontSize: '12px', color: '#B0A396', margin: '32px 0 0', lineHeight: '1.5' }
