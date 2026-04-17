@@ -126,7 +126,7 @@ const JoinPage = () => {
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = code.replace(/\s/g, "");
-    if (trimmed.length < 6) return;
+    if (trimmed.length < 6) return; // accept 6–8 digits (Supabase sends 6 or 8 depending on settings)
     setError("");
     setSubmitting(true);
     const { error: err } = await verifyOtp(email.trim(), trimmed);
@@ -195,14 +195,14 @@ const JoinPage = () => {
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
-              maxLength={6}
+              maxLength={8}
               value={code}
               onChange={(e) => {
                 // Only allow digits
                 setCode(e.target.value.replace(/\D/g, ""));
                 setError("");
               }}
-              placeholder="000000"
+              placeholder="00000000"
               className="w-full bg-transparent border-b border-cream pb-2.5 font-serif text-[32px] text-center tracking-[0.35em] text-espresso placeholder:text-taupe/30 focus:outline-none focus:border-cocoa transition-colors"
             />
             {error && (
@@ -210,7 +210,7 @@ const JoinPage = () => {
             )}
             <button
               type="submit"
-              disabled={submitting || code.replace(/\s/g, "").length < 6}
+              disabled={submitting || code.replace(/\s/g, "").length < 6} // 6 min keeps button enabled at 6+ digits
               className="mt-2 flex w-full items-center justify-center rounded-full bg-espresso py-4 font-sans text-[11px] font-semibold uppercase tracking-[0.28em] text-background transition-opacity disabled:opacity-40"
               style={{ WebkitTapHighlightColor: "transparent" }}
             >
