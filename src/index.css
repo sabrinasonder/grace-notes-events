@@ -95,6 +95,13 @@
   }
 }
 
+/* Prevent iOS from auto-zooming when tapping inputs (requires font-size >= 16px) */
+@media screen and (max-width: 768px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
 /* iOS safe area: push sticky page nav bars below status bar / Dynamic Island */
 @supports (padding-top: env(safe-area-inset-top)) {
   .sticky.top-0 {

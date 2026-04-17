@@ -101,19 +101,51 @@ const InviteScreen = ({ user }: { user: any }) => {
           invitee_email: email.trim().toLowerCase(),
           personal_note: note.trim() || null,
         })
-        .select("token")
+        .select("token, id")
         .single();
       if (error) throw error;
-      return data as { token: string };
+      return data as { token: string; id: string };
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      // Capture form values before clearing state
+      const inviteeName = name.trim();
+      const inviteeEmail = email.trim().toLowerCase();
+      const personalNote = note.trim() || null;
+
       setLatestToken(data.token);
       setName("");
       setEmail("");
       setNote("");
       setShowForm(false);
       qc.invalidateQueries({ queryKey: ["my_invites", user.id] });
-      toast({ title: "Invite created!", description: "Share the link below." });
+      toast({ title: "Invite sent!", description: `Email sent to ${inviteeEmail}` });
+
+      // Send the invite email automatically
+      try {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name, city")
+          .eq("id", user.id)
+          .single();
+
+        await supabase.functions.invoke("send-transactional-email", {
+          body: {
+            templateName: "circle-invite",
+            recipientEmail: inviteeEmail,
+            idempotencyKey: `circle-invite-${data.id}`,
+            templateData: {
+              inviterName: profile?.full_name || "A friend",
+              inviteeName,
+              personalNote,
+              city: profile?.city || null,
+              acceptUrl: joinLinkFor(data.token),
+            },
+          },
+        });
+      } catch (err) {
+        console.error("Failed to send invite email:", err);
+        // Don't fail the whole flow for email send failure
+      }
     },
     onError: (err: any) => {
       toast({ title: "Failed to create invite", description: err.message, variant: "destructive" });
