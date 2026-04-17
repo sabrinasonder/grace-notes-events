@@ -95,6 +95,13 @@
   }
 }
 
+/* iOS safe area: push sticky page nav bars below status bar / Dynamic Island */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .sticky.top-0 {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
 /* Google Places Autocomplete dropdown */
 .pac-container {
   z-index: 9999 !important;

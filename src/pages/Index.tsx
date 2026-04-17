@@ -475,7 +475,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background pb-28">
       {/* Editorial greeting header */}
-      <div className="px-6 pt-8 pb-5">
+      <div className="px-6 pb-5" style={{ paddingTop: "calc(env(safe-area-inset-top) + 32px)" }}>
         <div className="mx-auto max-w-lg">
           <div className="flex items-center justify-between mb-4">
             <p className="font-sans text-[11px] font-semibold uppercase tracking-[0.25em] text-taupe">
