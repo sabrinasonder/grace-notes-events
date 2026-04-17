@@ -1019,13 +1019,14 @@ const EventDetail = () => {
         {/* Top-left: Back */}
         <button
           onClick={() => navigate(-1)}
-          className="absolute top-12 left-5 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 backdrop-blur-sm"
+          className="absolute left-5 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 backdrop-blur-sm"
+          style={{ top: "calc(env(safe-area-inset-top) + 12px)" }}
         >
           <ArrowLeft className="h-4 w-4 text-cocoa" strokeWidth={2} />
         </button>
 
         {/* Top-right: Menu + Home */}
-        <div className="absolute top-12 right-5 flex gap-2">
+        <div className="absolute right-5 flex gap-2" style={{ top: "calc(env(safe-area-inset-top) + 12px)" }}>
           {isHost && event.status !== "cancelled" && (
             <div className="relative">
               <button
@@ -1098,7 +1099,7 @@ const EventDetail = () => {
         </div>
 
         {/* Hero pills (price + privacy) */}
-        <div className="absolute top-12 left-20 flex gap-2 flex-wrap max-w-[55%]">
+        <div className="absolute left-20 flex gap-2 flex-wrap max-w-[55%]" style={{ top: "calc(env(safe-area-inset-top) + 12px)" }}>
           {event.status === "cancelled" && (
             <span className="rounded-full bg-destructive px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
               Cancelled
