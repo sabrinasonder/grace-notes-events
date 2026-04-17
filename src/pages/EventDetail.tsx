@@ -1026,7 +1026,7 @@ const EventDetail = () => {
         </button>
 
         {/* Top-right: Menu + Home */}
-        <div className="absolute right-5 flex gap-2" style={{ top: "calc(env(safe-area-inset-top) + 12px)" }}>
+        <div className="absolute right-4 flex gap-1.5" style={{ top: "calc(env(safe-area-inset-top) + 12px)" }}>
           {isHost && event.status !== "cancelled" && (
             <div className="relative">
               <button
@@ -1090,12 +1090,6 @@ const EventDetail = () => {
               <Heart className="h-4 w-4" strokeWidth={1.5} fill={isFavorited(id) ? "#D89B86" : "none"} color={isFavorited(id) ? "#D89B86" : "#3A2A20"} />
             </button>
           )}
-          <button
-            onClick={() => navigate("/")}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 backdrop-blur-sm"
-          >
-            <Home className="h-4 w-4 text-cocoa" strokeWidth={2} />
-          </button>
         </div>
 
         {/* Hero pills (price + privacy) */}
