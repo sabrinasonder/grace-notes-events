@@ -111,7 +111,7 @@ const Index = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("events")
-        .select("*, profiles!events_host_id_fkey(full_name, avatar_url), rsvps(id, status), event_hosts(user_id, profiles!event_hosts_user_id_fkey(full_name, avatar_url))")
+        .select("*, profiles!events_host_id_fkey(full_name, avatar_url), rsvps(id, status), event_hosts(user_id)")
         .gte("starts_at", new Date().toISOString())
         .eq("status", "active")
         .order("starts_at", { ascending: true });
@@ -319,9 +319,9 @@ const Index = () => {
     const goingCount = event.rsvps?.filter((r: any) => r.status === "going").length || 0;
     const hostProfile = event.profiles;
     const coHosts: any[] = event.event_hosts || [];
-    const allHosts = coHosts.length > 0
-      ? coHosts.map((h: any) => h.profiles).filter(Boolean)
-      : [hostProfile].filter(Boolean);
+    // event_hosts no longer carries nested profiles — always use primary host profile
+    const allHosts = [hostProfile].filter(Boolean);
+    void coHosts; // co-host user_ids available if needed in future
     const hostFirstNames = allHosts.map((h: any) => (h?.full_name || "Host").split(" ")[0]);
     const hostDisplayName = hostFirstNames.length === 0
       ? "Host"
