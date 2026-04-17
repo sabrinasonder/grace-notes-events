@@ -303,9 +303,14 @@ const CreateEvent = () => {
             }
           : {};
 
-        const { data, error } = await (supabase as any)
+        // Pre-generate the ID so we never need RETURNING (avoids SELECT policy
+        // being evaluated during INSERT which can surface as RLS errors)
+        const newEventId = crypto.randomUUID();
+
+        const { error } = await (supabase as any)
           .from("events")
           .insert({
+            id: newEventId,
             host_id: user.id,
             title,
             description: description || null,
@@ -319,10 +324,9 @@ const CreateEvent = () => {
             auto_reminders_enabled: autoReminders,
             privacy,
             ...recurrencePayload,
-          })
-          .select("id")
-          .single();
+          });
         if (error) throw error;
+        const data = { id: newEventId };
 
         if (isRecurring) {
           // Fire and forget — generates next 3 months of instances
