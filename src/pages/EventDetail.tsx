@@ -820,18 +820,30 @@ const EventDetail = () => {
       if (result?.action === "created" && result.status === "going" && event && event.price_cents > 0) {
         setShowPaymentSheet(true);
       }
-      // When an invited guest responds for the first time, update invite status + show a warm toast
-      if (result?.action === "created" && isInvited) {
+      // When an invited guest responds (any action except removing), update invite + dismiss notification
+      if (isInvited && result?.action !== "removed") {
         const newInviteStatus =
-          result.status === "going" ? "accepted" : result.status === "declined" ? "declined" : null;
-        if (newInviteStatus) {
-          supabase
-            .from("event_invites")
-            .update({ status: newInviteStatus as any })
-            .eq("event_id", id!)
-            .eq("invited_user_id", user!.id)
-            .then(() => queryClient.invalidateQueries({ queryKey: ["event_invites", id] }));
-        }
+          result.status === "going" || result.status === "maybe" ? "accepted" : "declined";
+        supabase
+          .from("event_invites")
+          .update({ status: newInviteStatus as any })
+          .eq("event_id", id!)
+          .eq("invited_user_id", user!.id)
+          .then(() => {
+            queryClient.invalidateQueries({ queryKey: ["event_invites", id] });
+            queryClient.invalidateQueries({ queryKey: ["pending-event-invites-banner", user?.id] });
+          });
+        // Dismiss the event_invite notification so it no longer appears on the home feed
+        supabase
+          .from("notifications" as any)
+          .update({ is_read: true, is_dismissed: true })
+          .eq("user_id", user!.id)
+          .eq("type", "event_invite")
+          .eq("related_event_id", id!)
+          .then(() => queryClient.invalidateQueries({ queryKey: ["notifications", user?.id] }));
+      }
+      // Show a warm toast and skip confirmation email for first-time invite responses
+      if (result?.action === "created" && isInvited) {
         const hostFirstName = (event?.profiles as any)?.full_name?.split(" ")[0] || "the host";
         if (result.status === "going" && isFree) {
           toast({ title: "You're going! 🎉" });
@@ -927,7 +939,7 @@ const EventDetail = () => {
   const isRequestToJoin = event.privacy === "request_to_join";
   const isInviteOnly = event.privacy === "invite_only";
   const isInvited = eventInvites.some((inv: any) => inv.invited_user_id === user?.id);
-  const needsRequestToJoin = (isRequestToJoin || (isInviteOnly && !isInvited)) && !isHost && !myRsvp;
+  const needsRequestToJoin = (isRequestToJoin || isInviteOnly) && !isInvited && !isHost && !myRsvp;
   const hasPendingRequest = myRequest?.status === "pending";
   const wasDeclined = myRequest?.status === "declined";
   const canChat = isHost || myRsvp?.status === "going" || myRsvp?.status === "maybe";
@@ -1315,27 +1327,7 @@ const EventDetail = () => {
                 <X className="h-4 w-4 text-destructive" strokeWidth={1.5} />
                 <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.2em] text-destructive">Request was declined</span>
               </div>
-            ) : (
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  value={requestMessage}
-                  onChange={(e) => setRequestMessage(e.target.value)}
-                  placeholder="Add a note to the host (optional)"
-                  className="w-full rounded-full border border-cream bg-white px-4 py-2.5 text-sm font-sans text-espresso placeholder:text-taupe focus:border-cocoa focus:outline-none focus:ring-1 focus:ring-cocoa transition-colors"
-                />
-                <button
-                  onClick={() => requestToJoinMutation.mutate()}
-                  disabled={requestToJoinMutation.isPending}
-                  className="w-full flex items-center justify-center gap-2 rounded-full bg-cocoa py-3 transition-all hover:opacity-90 disabled:opacity-50"
-                >
-                  {requestToJoinMutation.isPending
-                    ? <Loader2 className="h-4 w-4 text-background animate-spin" />
-                    : <UserCheck className="h-4 w-4 text-background" strokeWidth={1.5} />}
-                  <span className="font-sans text-[12px] font-semibold uppercase tracking-[0.2em] text-background">Request Access</span>
-                </button>
-              </div>
-            )}
+            ) : null}
           </div>
         </div>
       )}

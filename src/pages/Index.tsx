@@ -204,15 +204,20 @@ const Index = () => {
       if (!invites?.length) return [];
       const eventIds = invites.map((i: any) => i.event_id);
       const inviterIds = [...new Set(invites.map((i: any) => i.invited_by))] as string[];
-      const [{ data: evts }, { data: pfs }] = await Promise.all([
+      const [{ data: evts }, { data: pfs }, { data: userRsvps }] = await Promise.all([
         supabase.from("events").select("id, title, starts_at").in("id", eventIds),
         supabase.from("profiles").select("id, full_name, avatar_url").in("id", inviterIds),
+        supabase.from("rsvps").select("event_id").eq("user_id", user!.id).in("event_id", eventIds),
       ]);
-      return invites.map((inv: any) => ({
-        ...inv,
-        event: evts?.find((e: any) => e.id === inv.event_id) ?? null,
-        inviter: pfs?.find((p: any) => p.id === inv.invited_by) ?? null,
-      }));
+      // Filter out invites for events the user has already RSVPd to
+      const rsvpdEventIds = new Set((userRsvps || []).map((r: any) => r.event_id));
+      return invites
+        .filter((inv: any) => !rsvpdEventIds.has(inv.event_id))
+        .map((inv: any) => ({
+          ...inv,
+          event: evts?.find((e: any) => e.id === inv.event_id) ?? null,
+          inviter: pfs?.find((p: any) => p.id === inv.invited_by) ?? null,
+        }));
     },
     enabled: !!user,
   });
@@ -712,7 +717,17 @@ const Index = () => {
                     <ChevronRight className="h-3 w-3" strokeWidth={2} />
                   </button>
                   <button
-                    onClick={() => dismissBanner(bannerKey)}
+                    onClick={() => {
+                      dismissBanner(bannerKey);
+                      // Also persist dismissal to DB so banner stays gone across sessions
+                      supabase
+                        .from("notifications" as any)
+                        .update({ is_read: true, is_dismissed: true })
+                        .eq("user_id", user!.id)
+                        .eq("type", "event_invite")
+                        .eq("related_event_id", first.event_id)
+                        .then(() => queryClient.invalidateQueries({ queryKey: ["notifications", user?.id] }));
+                    }}
                     className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-cream transition-colors"
                   >
                     <X className="h-3.5 w-3.5 text-taupe" strokeWidth={2} />
