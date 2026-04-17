@@ -11,6 +11,7 @@ interface AuthContextType {
   membershipStatus: MembershipStatus;
   refreshMembership: () => Promise<void>;
   signInWithMagicLink: (email: string, options?: { emailRedirectTo?: string }) => Promise<{ error: Error | null }>;
+  verifyOtp: (email: string, token: string) => Promise<{ error: Error | null }>;
   signInWithPassword: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -161,6 +162,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error as Error | null };
   };
 
+  const verifyOtp = async (email: string, token: string) => {
+    const { error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
+    return { error: error as Error | null };
+  };
+
   const signInWithPassword = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error as Error | null };
@@ -178,6 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       membershipStatus,
       refreshMembership,
       signInWithMagicLink,
+      verifyOtp,
       signInWithPassword,
       signOut,
     }}>
