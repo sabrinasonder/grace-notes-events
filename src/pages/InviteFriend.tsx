@@ -128,7 +128,7 @@ const InviteScreen = ({ user }: { user: any }) => {
           .eq("id", user.id)
           .single();
 
-        await supabase.functions.invoke("send-transactional-email", {
+        const { data: fnData, error: fnError } = await supabase.functions.invoke("send-transactional-email", {
           body: {
             templateName: "circle-invite",
             recipientEmail: inviteeEmail,
@@ -142,9 +142,16 @@ const InviteScreen = ({ user }: { user: any }) => {
             },
           },
         });
+
+        if (fnError) {
+          console.error("[invite] email function error:", fnError);
+          toast({ title: "Invite created but email failed", description: fnError.message || "Check Supabase function logs", variant: "destructive" });
+        } else if (!fnData?.success && !fnData?.queued) {
+          console.error("[invite] unexpected response:", fnData);
+          toast({ title: "Invite created but email may not have sent", description: fnData?.error || "Check Supabase function logs", variant: "destructive" });
+        }
       } catch (err) {
-        console.error("Failed to send invite email:", err);
-        // Don't fail the whole flow for email send failure
+        console.error("[invite] email send threw:", err);
       }
     },
     onError: (err: any) => {
@@ -170,7 +177,7 @@ const InviteScreen = ({ user }: { user: any }) => {
         .eq("id", user.id)
         .single();
 
-      await supabase.functions.invoke("send-transactional-email", {
+      const { data: fnData, error: fnError } = await supabase.functions.invoke("send-transactional-email", {
         body: {
           templateName: "circle-invite",
           recipientEmail: inv.invitee_email,
@@ -184,8 +191,21 @@ const InviteScreen = ({ user }: { user: any }) => {
           },
         },
       });
+
+      if (fnError) {
+        console.error("[resend] function error:", fnError);
+        toast({ title: "Failed to resend", description: fnError.message || "Email service error", variant: "destructive" });
+        return;
+      }
+      if (!fnData?.success && !fnData?.queued) {
+        console.error("[resend] unexpected response:", fnData);
+        toast({ title: "Failed to resend", description: fnData?.error || "Unexpected response from email service", variant: "destructive" });
+        return;
+      }
+
       toast({ title: "Invite resent!", description: `Email sent to ${inv.invitee_email}` });
     } catch (err: any) {
+      console.error("[resend] caught:", err);
       toast({ title: "Failed to resend", description: err.message, variant: "destructive" });
     } finally {
       setResending(null);
