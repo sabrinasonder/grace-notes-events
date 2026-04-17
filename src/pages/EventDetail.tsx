@@ -1093,13 +1093,16 @@ const EventDetail = () => {
 
           {/* ── Privacy / Invite badge ── */}
           {isHost ? (
-            <button
-              onClick={() => setShowInviteSheet(true)}
-              className="rounded-full bg-cocoa/80 px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-background backdrop-blur-sm flex items-center gap-1 transition-opacity hover:opacity-90"
-            >
-              <UserPlus className="h-2.5 w-2.5" strokeWidth={2} />
-              Invite
-            </button>
+            // Hosts see an action button only for restricted events; open events show no badge here
+            isInviteOnly || isRequestToJoin ? (
+              <button
+                onClick={() => setShowInviteSheet(true)}
+                className="rounded-full bg-cocoa/80 px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-background backdrop-blur-sm flex items-center gap-1 transition-opacity hover:opacity-90"
+              >
+                <UserPlus className="h-2.5 w-2.5" strokeWidth={2} />
+                Invite
+              </button>
+            ) : null
           ) : isRequestToJoin && hasPendingRequest ? (
             <span className="rounded-full bg-blush/80 px-3 py-1 font-sans text-[10px] font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm flex items-center gap-1">
               <Clock className="h-2.5 w-2.5" strokeWidth={2} />
