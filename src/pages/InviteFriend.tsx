@@ -14,6 +14,8 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  X,
+  RotateCw,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { BottomNav } from "@/components/BottomNav";
@@ -123,6 +125,24 @@ const InviteScreen = ({ user }: { user: any }) => {
     if (!name.trim() || !email.trim()) return;
     createInviteMutation.mutate();
   };
+
+  const revokeInviteMutation = useMutation({
+    mutationFn: async (inviteId: string) => {
+      const { error } = await (supabase as any)
+        .from("invites")
+        .update({ status: "revoked" })
+        .eq("id", inviteId)
+        .eq("inviter_id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["my_invites", user.id] });
+      toast({ title: "Invite removed" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Could not remove invite", description: err.message, variant: "destructive" });
+    },
+  });
 
   const joinLinkFor = (token: string) => `${window.location.origin}/join/${token}`;
 
@@ -279,15 +299,25 @@ const InviteScreen = ({ user }: { user: any }) => {
                       <span className={`font-sans text-[10px] font-semibold uppercase tracking-[0.18em] shrink-0 ${displayStatus.color}`}>
                         {displayStatus.label}
                       </span>
-                      {(inv.status === "pending" && !expired) && (
+                      {/* Reshare button for pending (non-expired) invites */}
+                      {inv.status === "pending" && !expired && (
                         <button
-                          onClick={() => handleCopy(link, inv.id)}
+                          onClick={() => handleShare(link, inv.invitee_name)}
                           className="ml-1 flex h-7 w-7 items-center justify-center rounded-full border border-cream text-taupe transition-colors hover:bg-cream shrink-0"
-                          title="Copy invite link"
+                          title="Reshare invite"
                         >
-                          {copied === inv.id
-                            ? <Check className="h-3 w-3 text-sage" strokeWidth={2} />
-                            : <Copy className="h-3 w-3" strokeWidth={1.5} />}
+                          <RotateCw className="h-3 w-3" strokeWidth={1.5} />
+                        </button>
+                      )}
+                      {/* Delete/revoke button for pending or expired invites */}
+                      {(inv.status === "pending" || expired) && (
+                        <button
+                          onClick={() => revokeInviteMutation.mutate(inv.id)}
+                          disabled={revokeInviteMutation.isPending}
+                          className="flex h-7 w-7 items-center justify-center rounded-full border border-cream text-taupe transition-colors hover:bg-destructive/10 hover:text-destructive hover:border-destructive/20 shrink-0"
+                          title="Remove invite"
+                        >
+                          <X className="h-3 w-3" strokeWidth={2} />
                         </button>
                       )}
                     </div>
